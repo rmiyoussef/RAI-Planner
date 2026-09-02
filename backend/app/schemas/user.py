@@ -6,6 +6,7 @@ class InternalUserCreate(BaseModel):
     full_name: str = Field(min_length=1, max_length=100)
     email: Optional[EmailStr] = None
     github_url: str = Field(min_length=1, max_length=500)
+    job_title: Optional[str] = Field(default=None, max_length=100)
 
     def github_username(self) -> str:
         # extract username
@@ -20,6 +21,7 @@ class InternalUserUpdate(BaseModel):
     full_name: Optional[str] = Field(default=None, min_length=1, max_length=100)
     email: Optional[EmailStr] = None
     github_url: Optional[str] = None
+    job_title: Optional[str] = Field(default=None, max_length=100)
 
 class InternalUserResponse(BaseModel):
     id: str
@@ -28,6 +30,7 @@ class InternalUserResponse(BaseModel):
     email: Optional[str] = None
     github_url: str
     github_username: str
+    job_title: Optional[str] = None
     created_at: str
     updated_at: str
 

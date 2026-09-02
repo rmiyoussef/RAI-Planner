@@ -25,11 +25,11 @@ export function Layout() {
   useEffect(() => { setStoredTheme(theme) }, [theme])
 
   const items = [
-    { to: '/', label: 'Home', icon: LayoutDashboard, desc: 'Overview & metrics' },
-    { to: '/projects', label: 'Projects', icon: FolderKanban, desc: 'Manage projects' },
-    { to: '/tasks', label: 'Tasks', icon: CheckSquare, desc: 'Engineering tasks' },
-    { to: '/users', label: 'Users', icon: Users, desc: 'Team members' },
-    { to: '/settings', label: 'Settings', icon: Settings, desc: 'AI & preferences' },
+    { to: '/', label: 'Home', icon: LayoutDashboard },
+    { to: '/projects', label: 'Projects', icon: FolderKanban },
+    { to: '/tasks', label: 'Tasks', icon: CheckSquare },
+    { to: '/users', label: 'Users', icon: Users },
+    { to: '/settings', label: 'Settings', icon: Settings },
   ]
 
   const initials = owner?.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'RA'
@@ -92,10 +92,7 @@ export function Layout() {
               {({ isActive }) => (
                 <>
                   <item.icon className={`w-[18px] h-[18px] shrink-0 ${isActive ? 'text-white' : 'text-muted-foreground group-hover:text-foreground'}`} />
-                  <div className="flex-1 min-w-0 text-left">
-                    <div className="leading-none">{item.label}</div>
-                    <div className={`text-[11px] leading-none mt-0.5 ${isActive ? 'text-white/70' : 'text-muted-foreground'}`}>{item.desc}</div>
-                  </div>
+                  <span className="flex-1 min-w-0 text-left leading-none">{item.label}</span>
                 </>
               )}
             </NavLink>

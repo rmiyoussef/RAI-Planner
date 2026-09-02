@@ -30,12 +30,15 @@ The installer will:
 
 Then:
 ```bash
-# edit env
-nano .env  # set MONGODB_URI
+# edit env (optional — empty MONGODB_URI uses the built-in in-memory dev DB)
+nano .env  # set MONGODB_URI if you want persistent data
 
-# run
-cd backend && source .venv/bin/activate && uvicorn app.main:app --reload --port 8000  # http://localhost:8000/docs
-cd frontend && npm run dev  # http://localhost:5173
+# one command to run everything:
+./start.sh   # → http://localhost:5173  (API docs at http://localhost:8000/docs)
+
+# or run the two parts manually:
+cd backend && source .venv/bin/activate && uvicorn app.main:app --reload --port 8000
+cd frontend && npm run dev
 # OR docker:
 docker-compose up --build
 ```
@@ -108,11 +111,11 @@ npm run dev
 ### 4. Environment Variables
 See `.env.example`:
 ```
-MONGODB_URI=mongodb+srv://...
+MONGODB_URI=mongodb+srv://...          # optional — empty = in-memory dev database
 MONGODB_DATABASE=rai_planner
-JWT_SECRET=long-random-string
-CORS_ORIGINS=http://localhost:5173
-VITE_API_URL=http://localhost:8000/api
+JWT_SECRET=auto-generated-by-installer
+CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+VITE_API_URL=/api                      # relative works with dev proxy & reverse proxies
 ```
 
 AI provider config is stored **in-app** via Settings → AI Configuration (encrypted).
@@ -130,6 +133,12 @@ npm test
 ```bash
 docker-compose up --build
 ```
+
+### Production behind nginx (optional)
+Vhost template + idempotent setup script live in `deploy/`:
+- `deploy/plan.squadifyai.com.conf` — serves the built `frontend/dist` and proxies `/api` to the backend
+- `deploy/setup-nginx.sh` — copies the vhost, includes it, tests and reloads nginx (run with sudo)
+Point DNS/`/etc/hosts` at your machine, adjust `server_name`/paths, then run the script.
 
 ## Key Product Invariants
 - Every task MUST belong to a project (`project_id` validated server-side)

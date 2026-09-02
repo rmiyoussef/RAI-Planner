@@ -153,7 +153,7 @@ export function Layout() {
         </header>
 
         <main className="flex-1 bg-background dark:bg-slate-950">
-          <div className="w-[90%] mx-auto py-6 lg:py-8">
+          <div className="w-[95%] mx-auto py-6 lg:py-8">
             <Outlet />
           </div>
         </main>

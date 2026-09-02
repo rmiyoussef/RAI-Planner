@@ -50,7 +50,7 @@ export function ProjectDetail() {
   }
 
   if (!project) return (
-    <div className="w-[90%] mx-auto py-12">
+    <div className="w-[95%] mx-auto py-12">
       {error ? (
         <div className="rounded-xl border border-destructive/20 bg-red-50 dark:bg-red-950/30 px-4 py-3 text-sm text-destructive flex gap-2">
           <AlertTriangle className="w-4 h-4 shrink-0" /> {error}

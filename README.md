@@ -66,6 +66,8 @@ MONGODB_DATABASE=rai_planner
 JWT_SECRET=auto-generated-by-installer
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 VITE_API_URL=/api                # relative — works with dev proxy & reverse proxies
+#PROJECTS_ROOT=/srv/projects     # sandbox: project paths must live inside (recommended in prod)
+#ALLOW_SIGNUP=false              # disable public registration after your account exists
 ```
 
 The backend reads `.env` from `backend/` or the repo root (both are checked).
@@ -184,10 +186,15 @@ Interactive docs at **`/docs`** (Swagger) and **`/redoc`**.
 ## Security Notes
 
 - Passwords hashed with bcrypt (72-byte truncation)
-- JWT auth, protected routes
+- JWT auth (HS256, algorithm pinned), protected routes
+- Rate limiting on login/signup (10 req/min/IP) + `ALLOW_SIGNUP` kill-switch
+- Optional `PROJECTS_ROOT` filesystem sandbox — enforced on project create, update, **and every agent/brain read**
+- API keys encrypted at rest with Fernet (AES + HMAC), masked (`••••abcd`), never logged
 - Mongo-safe queries, Pydantic validation
-- Path traversal prevention, symlink handling, secret filtering
+- Path traversal prevention, symlink handling, secret filtering (`.env*`, `.pem`, `.key`, binaries)
 - Cortex-safe Markdown rendering (escaped HTML)
+
+See [SECURITY.md](SECURITY.md) for the full policy, hardening checklist for public deployments, and how to report vulnerabilities.
 
 ## .brain Context
 

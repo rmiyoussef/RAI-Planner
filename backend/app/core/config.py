@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE_BYTES: int = 1024 * 1024  # 1MB per file
     MAX_CONTEXT_BYTES: int = 200_000
     ENCRYPTION_KEY: str = ""  # if empty, will derive from JWT_SECRET
+    # Security hardening (recommended in production — see SECURITY.md)
+    # If set, project_path must resolve inside this directory (filesystem sandbox)
+    PROJECTS_ROOT: str = ""
+    # Set to false to disable public registration after the first account(s) exist
+    ALLOW_SIGNUP: bool = True
 
     class Config:
         # backend/.env when running from backend/, root .env when set at repo root

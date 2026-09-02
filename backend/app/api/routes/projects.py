@@ -72,17 +72,19 @@ async def list_projects(
 
 @router.post("", response_model=ProjectResponse)
 async def create_project(payload: ProjectCreate, owner=Depends(get_current_owner)):
-    # validate path (allow non-existing? but spec says validate safely)
-    # We won't reject if path doesn't exist, but we note. For safety allow creation even if path missing.
-    # However try to validate normalization to prevent traversal like weird.
-    # For now accept any path but store resolved if exists.
     col = get_collection("projects")
+    project_path = payload.project_path
+    if project_path:
+        ok, err_or_resolved = validate_project_path(project_path)
+        if not ok:
+            raise HTTPException(status_code=400, detail=f"Invalid project path: {err_or_resolved}")
+        project_path = err_or_resolved
     doc = {
         "_id": new_id(),
         "owner_id": owner["_id"],
         "name": payload.name,
         "description": payload.description,
-        "project_path": payload.project_path,
+        "project_path": project_path,
         "tags": payload.tags,
         "status": payload.status,
         "created_at": utc_now(),
@@ -116,6 +118,11 @@ async def update_project(project_id: str, payload: ProjectUpdate, owner=Depends(
         val = getattr(payload, field)
         if val is not None:
             updates[field] = val
+    if "project_path" in updates and updates["project_path"]:
+        ok, err_or_resolved = validate_project_path(updates["project_path"])
+        if not ok:
+            raise HTTPException(status_code=400, detail=f"Invalid project path: {err_or_resolved}")
+        updates["project_path"] = err_or_resolved
     if updates:
         updates["updated_at"] = utc_now()
         await col.update_one({"_id": project_id}, {"$set": updates})

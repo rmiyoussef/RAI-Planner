@@ -2,6 +2,8 @@ import os
 import pathlib
 from typing import Dict, Any, List, Tuple
 
+from app.core.config import get_settings
+
 SENSITIVE_NAMES = {".env", ".env.local", ".env.development", ".env.production"}
 SENSITIVE_EXTS = {".pem", ".key", ".p12", ".pfx"}
 IGNORED_DIRS = {"node_modules", ".git", ".venv", "venv", "__pycache__", "dist", "build", ".next", ".turbo", "cache", ".cache"}
@@ -9,12 +11,30 @@ BINARY_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".zip", ".tar", 
 MAX_FILE_SIZE = 1_000_000
 MAX_CONTEXT_CHARS = 200_000
 
+
+def _within_projects_root(p: pathlib.Path) -> Tuple[bool, str]:
+    """Enforce the optional PROJECTS_ROOT sandbox (defense-in-depth on every read)."""
+    root = get_settings().PROJECTS_ROOT
+    if not root:
+        return True, ""
+    try:
+        root_res = pathlib.Path(root).expanduser().resolve()
+        p.relative_to(root_res)
+        return True, ""
+    except ValueError:
+        return False, f"Project path is outside the allowed projects root ({root})"
+    except Exception as e:
+        return False, str(e)
+
+
 def validate_project_path(project_path: str) -> Tuple[bool, str]:
     if not project_path:
         return False, "Project path is empty"
-    # Prevent traversal that escapes? Allow absolute paths, but normalize.
     try:
-        p = pathlib.Path(project_path).resolve()
+        p = pathlib.Path(project_path).expanduser().resolve()
+        ok, err = _within_projects_root(p)
+        if not ok:
+            return False, err
         if not p.exists():
             return False, "Project path does not exist"
         if not p.is_dir():
@@ -33,6 +53,9 @@ def is_safe_path(base: pathlib.Path, target: pathlib.Path) -> bool:
 
 def brain_status(project_path: str) -> Dict[str, Any]:
     p = pathlib.Path(project_path)
+    ok, err = _within_projects_root(p)
+    if not ok:
+        return {"exists": False, "path": str(p), "error": err, "message": err}
     brain = p / ".brain"
     exists = brain.exists() and brain.is_dir()
     info = {"exists": exists, "path": str(brain)}
@@ -61,6 +84,17 @@ def brain_status(project_path: str) -> Dict[str, Any]:
 def collect_project_context(project_path: str, max_bytes: int = 200_000) -> Dict[str, Any]:
     """Build concise project context respecting limits and safety."""
     base = pathlib.Path(project_path).resolve()
+    ok, err = _within_projects_root(base)
+    if not ok:
+        return {
+            "project_path": str(base),
+            "top_level": [],
+            "structure_sample": [],
+            "brain_content": "",
+            "brain_exists": False,
+            "truncated": False,
+            "error": err,
+        }
     context_parts = []
     total_chars = 0
     tree = []

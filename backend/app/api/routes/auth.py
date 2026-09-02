@@ -1,7 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request, Depends
 from app.schemas.auth import SignupRequest, LoginRequest, TokenResponse, OwnerResponse, ProfileUpdateRequest, PasswordChangeRequest
 from app.core.database import get_collection, new_id, utc_now
 from app.core.security import hash_password, verify_password, create_access_token
+from app.core.config import get_settings
+from app.core.ratelimit import rate_limit
 from app.api.deps import get_current_owner
 from fastapi import Depends
 
@@ -17,7 +19,11 @@ def owner_to_response(doc):
     )
 
 @router.post("/signup", response_model=TokenResponse)
-async def signup(payload: SignupRequest):
+async def signup(payload: SignupRequest, request: Request):
+    settings = get_settings()
+    if not settings.ALLOW_SIGNUP:
+        raise HTTPException(status_code=403, detail="Registration is disabled on this server")
+    rate_limit(request, "signup", limit=10, window_seconds=60)
     if payload.password != payload.confirm_password:
         raise HTTPException(status_code=400, detail="Passwords do not match")
     col = get_collection("owners")
@@ -37,7 +43,9 @@ async def signup(payload: SignupRequest):
     return TokenResponse(access_token=token, owner=owner_to_response(doc))
 
 @router.post("/login", response_model=TokenResponse)
-async def login(payload: LoginRequest):
+async def login(payload: LoginRequest, request: Request):
+    # Brute-force protection: 10 attempts / minute / IP
+    rate_limit(request, "login", limit=10, window_seconds=60)
     col = get_collection("owners")
     owner = await col.find_one({"email": payload.email.lower()})
     if not owner or not verify_password(payload.password, owner["password_hash"]):

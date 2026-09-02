@@ -13,6 +13,13 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    if not settings.PROJECTS_ROOT:
+        logger.warning(
+            "PROJECTS_ROOT is not set — projects may point to ANY directory on this machine. "
+            "Set PROJECTS_ROOT in .env to sandbox project paths (recommended in production). See SECURITY.md."
+        )
+    if settings.ALLOW_SIGNUP:
+        logger.info("Public signup is enabled (ALLOW_SIGNUP=true). Set ALLOW_SIGNUP=false to disable registration.")
     logger.info("RAI Planner backend started")
     yield
 

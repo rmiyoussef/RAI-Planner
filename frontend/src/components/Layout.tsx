@@ -156,7 +156,7 @@ export function Layout() {
         </main>
 
         <footer className="border-t border-border bg-card/50 px-6 py-3 text-center text-xs text-muted-foreground">
-          © {new Date().getFullYear()} RAI Planner — Smart Engineering Platform • v0.1.2 • Built for business owners
+          © 2026 Squadify Lab · RAI Planner · Rami Youssef · v0.1
         </footer>
       </div>
     </div>

@@ -243,7 +243,7 @@ export function Settings() {
   ]
 
   return (
-    <div className="mx-auto w-full max-w-[1440px] space-y-6 p-4 sm:p-6 lg:p-8 animate-in motion-reduce:animate-none">
+    <div className="w-full space-y-6 p-4 sm:p-6 lg:p-8 animate-in motion-reduce:animate-none">
       {/* Header */}
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center gap-2.5">

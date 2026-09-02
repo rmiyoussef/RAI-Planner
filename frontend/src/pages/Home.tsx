@@ -161,7 +161,7 @@ export function Home() {
 
   if (loading) {
     return (
-      <div className="mx-auto w-full max-w-[1440px] space-y-6 p-4 sm:p-6 lg:p-8">
+      <div className="w-full space-y-6 p-4 sm:p-6 lg:p-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-3">
             <div className="h-8 w-56 animate-pulse rounded-lg bg-muted" />
@@ -188,7 +188,7 @@ export function Home() {
 
   if (error) {
     return (
-      <div className="mx-auto w-full max-w-[1440px] p-4 sm:p-6 lg:p-8">
+      <div className="w-full p-4 sm:p-6 lg:p-8">
         <div
           role="alert"
           className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-300"
@@ -209,7 +209,7 @@ export function Home() {
   const tasksByPriority = (data.tasks_by_priority ?? {}) as Record<string, number>
 
   return (
-    <div className="mx-auto w-full max-w-[1440px] space-y-6 p-4 sm:p-6 lg:p-8 animate-in motion-reduce:animate-none">
+    <div className="w-full space-y-6 p-4 sm:p-6 lg:p-8 animate-in motion-reduce:animate-none">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1.5">

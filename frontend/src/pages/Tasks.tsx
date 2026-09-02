@@ -248,7 +248,7 @@ export function Tasks() {
     selected?.assigned_user_name || users.find((u) => u.id === selected?.assigned_to)?.full_name || (selected?.assigned_to ? selected.assigned_to : 'Unassigned')
 
   return (
-    <div className="mx-auto w-full max-w-[1440px] space-y-6 p-4 sm:p-6 lg:p-8 animate-in motion-reduce:animate-none">
+    <div className="w-full space-y-6 p-4 sm:p-6 lg:p-8 animate-in motion-reduce:animate-none">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1.5">

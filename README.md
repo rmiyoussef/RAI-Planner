@@ -1,6 +1,6 @@
 # RAI Planner — Smart Engineering Agent Platform
 
-![Version](https://img.shields.io/badge/version-v0.1.6-blue) ![License](https://img.shields.io/badge/license-MIT-green)
+![Version](https://img.shields.io/badge/version-v0.1.7-blue) ![License](https://img.shields.io/badge/license-MIT-green)
 
 A modern project/task management app with an **AI-powered Smart Engineering Agent** that understands your repository + `.brain/` context to generate high-quality engineering tasks.
 

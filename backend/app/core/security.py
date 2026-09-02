@@ -35,31 +35,57 @@ def decode_token(token: str) -> Optional[str]:
     except JWTError:
         return None
 
-# Simple secret encryption for API keys (Fernet-like but lightweight without extra dep)
-# Use base64 + xor with derived key if ENCRYPTION_KEY not set, else use provided
-# For production, recommend Fernet. Here we implement reversible obfuscation suitable for demo.
+# Secret encryption for API keys at rest.
+# Uses Fernet (AES-128-CBC + HMAC-SHA256, authenticated) from the `cryptography`
+# package when available. Falls back to a legacy XOR scheme only for decryption
+# of values written before Fernet support, so existing data stays readable.
+# Derives the key from ENCRYPTION_KEY (preferred) or JWT_SECRET.
+
+try:
+    from cryptography.fernet import Fernet, InvalidToken as _InvalidToken
+    _FERNET_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _FERNET_AVAILABLE = False
 
 def _get_enc_key() -> bytes:
     settings = get_settings()
     raw = settings.ENCRYPTION_KEY or settings.JWT_SECRET
     return hashlib.sha256(raw.encode()).digest()
 
-def encrypt_secret(plain: str) -> str:
-    if not plain:
-        return ""
+def _fernet():
+    return Fernet(base64.urlsafe_b64encode(_get_enc_key()))
+
+def _xor_encrypt(plain: str) -> str:
     key = _get_enc_key()
     data = plain.encode()
     enc = bytes(b ^ key[i % len(key)] for i, b in enumerate(data))
     return base64.urlsafe_b64encode(enc).decode()
 
+def _xor_decrypt(cipher: str) -> str:
+    key = _get_enc_key()
+    enc = base64.urlsafe_b64decode(cipher.encode())
+    dec = bytes(b ^ key[i % len(key)] for i, b in enumerate(enc))
+    return dec.decode()
+
+def encrypt_secret(plain: str) -> str:
+    if not plain:
+        return ""
+    if _FERNET_AVAILABLE:
+        return _fernet().encrypt(plain.encode()).decode()
+    return _xor_encrypt(plain)
+
 def decrypt_secret(cipher: str) -> str:
     if not cipher:
         return ""
+    if _FERNET_AVAILABLE:
+        try:
+            return _fernet().decrypt(cipher.encode()).decode()
+        except _InvalidToken:
+            pass  # legacy XOR value written before Fernet support
+        except Exception:
+            return ""
     try:
-        key = _get_enc_key()
-        enc = base64.urlsafe_b64decode(cipher.encode())
-        dec = bytes(b ^ key[i % len(key)] for i, b in enumerate(enc))
-        return dec.decode()
+        return _xor_decrypt(cipher)
     except Exception:
         return ""
 

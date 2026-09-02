@@ -1,6 +1,77 @@
 # RAI Planner — Smart Engineering Agent Platform
 
+![Version](https://img.shields.io/badge/version-v0.1.0-blue) ![License](https://img.shields.io/badge/license-MIT-green)
+
 A modern project/task management app with an **AI-powered Smart Engineering Agent** that understands your repository + `.brain/` context to generate high-quality engineering tasks.
+
+## ⚡ One-Line Install
+
+**For everyone — copy and run:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/rmiyoussef/RAI-Planner/main/install.sh | bash
+```
+
+Or clone + install:
+
+```bash
+git clone https://github.com/rmiyoussef/RAI-Planner.git
+cd RAI-Planner
+./install.sh
+# or: ./scripts/install.sh
+```
+
+The installer will:
+- Clone the repo if needed
+- Create `.env` from `.env.example` (and generate `JWT_SECRET`)
+- Create Python venv + install backend deps
+- Install frontend deps + build
+- Print next steps
+
+Then:
+```bash
+# edit env
+nano .env  # set MONGODB_URI
+
+# run
+cd backend && source .venv/bin/activate && uvicorn app.main:app --reload --port 8000  # http://localhost:8000/docs
+cd frontend && npm run dev  # http://localhost:5173
+# OR docker:
+docker-compose up --build
+```
+
+## 🔄 Update (version-aware)
+
+**Easy update — checks repo, compares versions, pulls latest:**
+
+```bash
+./update.sh
+# or
+./scripts/update.sh
+# or one-liner (from any directory that is a RAI-Planner clone):
+curl -fsSL https://raw.githubusercontent.com/rmiyoussef/RAI-Planner/main/update.sh | bash
+```
+
+What it does:
+- Reads local `VERSION` (e.g. `v0.1.0`) and remote `VERSION` / latest `v*` tag
+- If local is outdated, `git pull` + reinstall deps + rebuild frontend
+- Shows `v0.1.0 → v0.1.1` and new commit
+- Version lives in `VERSION` at repo root and tag `v0.1.0`, `v0.1.1`...
+
+Every push to `main`/`staging` auto-bumps **patch** version via GitHub Actions (`.github/workflows/version-bump.yml`) — starting at `v0.1.0`. To bump minor/major manually:
+```bash
+./scripts/bump-version.sh patch  # 0.1.0 → 0.1.1
+./scripts/bump-version.sh minor  # 0.1.1 → 0.2.0
+./scripts/bump-version.sh major  # 0.2.0 → 1.0.0
+git commit -am "chore: bump version" && git tag v0.2.0 && git push --follow-tags
+```
+
+Check version anytime:
+```bash
+cat VERSION
+git tag --sort=-v:refname | head -n 5
+./update.sh  # will tell you if you're behind
+```
 
 ## Tech Stack
 - **Frontend:** React + TypeScript + Vite, React Router, light/dark theme

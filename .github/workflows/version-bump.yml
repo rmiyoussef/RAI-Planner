@@ -1,0 +1,60 @@
+name: Version Bump
+
+on:
+  push:
+    branches: [main, staging, master]
+    paths-ignore:
+      - "VERSION"
+      - "**.md"
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip version]') && !contains(github.event.head_commit.message, 'chore: bump version')"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump VERSION (patch)
+        id: bump
+        run: |
+          CUR=$(cat VERSION 2>/dev/null | tr -d '[:space:]' || echo "0.1.0")
+          echo "Current: $CUR"
+          IFS='.' read -r MAJ MIN PAT <<< "$CUR"
+          MAJ=${MAJ:-0}; MIN=${MIN:-1}; PAT=${PAT:-0}
+          PAT=$((PAT+1))
+          NEW="$MAJ.$MIN.$PAT"
+          echo "$NEW" > VERSION
+          echo "NEW=$NEW" >> $GITHUB_OUTPUT
+          echo "Bumped $CUR → $NEW"
+          # sync frontend package.json
+          if [ -f frontend/package.json ]; then
+            python3 -c "import json; p='frontend/package.json'; d=json.load(open(p)); d['version']='$NEW'; open(p,'w').write(json.dumps(d, indent=2)+'\n')"
+          fi
+          cat VERSION
+          cat frontend/package.json | grep '"version"' || true
+
+      - name: Commit and tag
+        run: |
+          NEW="${{ steps.bump.outputs.NEW }}"
+          git add VERSION frontend/package.json
+          # Only commit if changed
+          if git diff --cached --quiet; then
+            echo "No version change to commit"
+            exit 0
+          fi
+          git commit -m "chore: bump version to v$NEW [skip version]"
+          git tag "v$NEW"
+          git push origin HEAD:${{ github.ref_name }} --follow-tags
+

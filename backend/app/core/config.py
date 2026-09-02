@@ -16,7 +16,8 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str = ""  # if empty, will derive from JWT_SECRET
 
     class Config:
-        env_file = ".env"
+        # backend/.env when running from backend/, root .env when set at repo root
+        env_file = (".env", "../.env")
         extra = "allow"
 
     @property

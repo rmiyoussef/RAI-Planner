@@ -56,5 +56,6 @@ jobs:
           fi
           git commit -m "chore: bump version to v$NEW [skip version]"
           git tag "v$NEW"
-          git push origin HEAD:${{ github.ref_name }} --follow-tags
+          git push origin HEAD:${{ github.ref_name }}
+          git push origin "v$NEW"
 

@@ -15,6 +15,8 @@ import {
   X,
   Sparkles,
 } from 'lucide-react'
+// @ts-ignore - package.json is outside src but vite bundles it
+import pkg from '../../package.json'
 
 export function Layout() {
   const { owner, logout } = useAuth()
@@ -156,7 +158,7 @@ export function Layout() {
         </main>
 
         <footer className="border-t border-border bg-card/50 px-6 py-3 text-center text-xs text-muted-foreground">
-          © 2026 Squadify Lab · RAI Planner · Rami Youssef · v0.1
+          © 2026 Squadify Lab · RAI Planner · Rami Youssef · v{(pkg as any).version}
         </footer>
       </div>
     </div>

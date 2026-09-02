@@ -11,3 +11,6 @@ frontend/dist/
 .opencode/
 logs/
 *.log
+.memory_db.json
+.memory_db.json.tmp
+backend/.memory_db.json

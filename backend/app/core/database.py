@@ -1,14 +1,40 @@
 import asyncio
+import json
 import logging
+import pathlib
 import uuid
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
-# Global in-memory fallback
+# Global in-memory fallback with file persistence so restarts don't log everyone out
+_PERSIST_PATH = pathlib.Path(__file__).resolve().parent.parent.parent / ".memory_db.json"
 _memory_db: Dict[str, Dict[str, Dict[str, Any]]] = {}
 _memory_lock = asyncio.Lock()
+
+
+def _load_persist():
+    try:
+        if _PERSIST_PATH.exists():
+            data = json.loads(_PERSIST_PATH.read_text())
+            if isinstance(data, dict):
+                _memory_db.clear()
+                _memory_db.update(data)
+                logger.info(f"Loaded persisted memory DB ({len(data)} collections) from {_PERSIST_PATH.name}")
+    except Exception as e:
+        logger.warning(f"Failed to load persisted DB: {e}")
+
+
+def _save_persist():
+    try:
+        _PERSIST_PATH.parent.mkdir(parents=True, exist_ok=True)
+        # atomic write
+        tmp = _PERSIST_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(_memory_db, indent=2, default=str))
+        tmp.replace(_PERSIST_PATH)
+    except Exception as e:
+        logger.warning(f"Failed to persist DB: {e}")
 
 class InMemoryCollection:
     def __init__(self, name: str):
@@ -21,6 +47,7 @@ class InMemoryCollection:
             _id = doc.get("_id") or str(uuid.uuid4())
             doc["_id"] = _id
             _memory_db[self.name][_id] = doc.copy()
+            _save_persist()
             class R: inserted_id = _id
             return R()
 
@@ -56,6 +83,7 @@ class InMemoryCollection:
                         for k, v in update["$inc"].items():
                             doc[k] = doc.get(k, 0) + v
                     _memory_db[self.name][_id] = doc
+                    _save_persist()
                     class R: modified_count = 1
                     return R()
             class R: modified_count = 0
@@ -66,6 +94,7 @@ class InMemoryCollection:
             for _id, doc in list(_memory_db[self.name].items()):
                 if _matches(doc, filt):
                     del _memory_db[self.name][_id]
+                    _save_persist()
                     class R: deleted_count = 1
                     return R()
             class R: deleted_count = 0
@@ -145,8 +174,9 @@ async def init_db():
     from .config import get_settings
     settings = get_settings()
     if not settings.MONGODB_URI:
-        logger.info("MONGODB_URI not set, using in-memory database")
+        logger.info("MONGODB_URI not set, using in-memory database (persisted to .memory_db.json)")
         _use_memory = True
+        _load_persist()
         return
     try:
         from motor.motor_asyncio import AsyncIOMotorClient
@@ -184,3 +214,4 @@ def new_id() -> str:
 async def clear_memory_db():
     async with _memory_lock:
         _memory_db.clear()
+        _save_persist()

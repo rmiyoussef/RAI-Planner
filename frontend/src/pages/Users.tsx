@@ -18,6 +18,7 @@ import {
   Search,
   Hash,
   CheckCircle2,
+  Briefcase,
 } from 'lucide-react'
 
 function isValidGithubUrl(url: string): boolean {
@@ -45,7 +46,7 @@ function initials(name: string) {
 export function Users() {
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
-  const [form, setForm] = useState({ full_name: '', email: '', github_url: '' })
+  const [form, setForm] = useState({ full_name: '', email: '', github_url: '', job_title: '' })
   const [editing, setEditing] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<any>({})
   const [error, setError] = useState('')
@@ -91,8 +92,9 @@ export function Users() {
         full_name: form.full_name.trim(),
         email: form.email.trim() || undefined,
         github_url: form.github_url.trim(),
+        job_title: form.job_title.trim() || undefined,
       })
-      setForm({ full_name: '', email: '', github_url: '' })
+      setForm({ full_name: '', email: '', github_url: '', job_title: '' })
       setShowCreate(false)
       setSuccess('User created successfully.')
       load()
@@ -118,6 +120,7 @@ export function Users() {
         full_name: editForm.full_name.trim(),
         email: editForm.email?.trim() || null,
         github_url: editForm.github_url.trim(),
+        job_title: editForm.job_title?.trim() || null,
       })
       setEditing(null)
       setSuccess('User updated.')
@@ -272,6 +275,21 @@ export function Users() {
               />
             </div>
 
+            <div className="space-y-1.5">
+              <label htmlFor="user-jobtitle" className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-foreground">
+                <Briefcase className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                Job title <span className="text-[11px] font-normal text-muted-foreground">(optional)</span>
+              </label>
+              <input
+                id="user-jobtitle"
+                value={form.job_title}
+                onChange={(e) => setForm({ ...form, job_title: e.target.value })}
+                placeholder="e.g. Senior Engineer"
+                className="input cursor-text"
+                maxLength={100}
+              />
+            </div>
+
             <div className="space-y-1.5 sm:col-span-2">
               <label htmlFor="user-github" className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-foreground">
                 <Link2 className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
@@ -360,6 +378,12 @@ export function Users() {
                   </th>
                   <th>
                     <span className="inline-flex items-center gap-1.5">
+                      <Briefcase className="h-3.5 w-3.5" aria-hidden="true" />
+                      Job title
+                    </span>
+                  </th>
+                  <th>
+                    <span className="inline-flex items-center gap-1.5">
                       <Link2 className="h-3.5 w-3.5" aria-hidden="true" />
                       GitHub
                     </span>
@@ -408,6 +432,25 @@ export function Users() {
                         <span className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
                           <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                           <span className="truncate max-w-[200px]">{u.email}</span>
+                        </span>
+                      ) : (
+                        <span className="text-sm font-medium text-muted-foreground">—</span>
+                      )}
+                    </td>
+
+                    <td className="min-w-[160px]">
+                      {editing === u.id ? (
+                        <input
+                          value={editForm.job_title ?? ''}
+                          onChange={(e) => setEditForm({ ...editForm, job_title: e.target.value })}
+                          placeholder="e.g. Senior Engineer"
+                          className="input h-9 cursor-text py-1.5 text-sm"
+                          maxLength={100}
+                        />
+                      ) : u.job_title ? (
+                        <span className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground">
+                          <Briefcase className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                          <span className="truncate max-w-[180px]">{u.job_title}</span>
                         </span>
                       ) : (
                         <span className="text-sm font-medium text-muted-foreground">—</span>
@@ -477,7 +520,7 @@ export function Users() {
                             type="button"
                             onClick={() => {
                               setEditing(u.id)
-                              setEditForm({ full_name: u.full_name, email: u.email || '', github_url: u.github_url })
+                              setEditForm({ full_name: u.full_name, email: u.email || '', github_url: u.github_url, job_title: u.job_title || '' })
                               setError('')
                             }}
                             className="btn btn-outline btn-sm cursor-pointer gap-1.5 hover:border-primary/30 hover:bg-primary-light hover:text-primary"

@@ -25,6 +25,7 @@ def doc_to_resp(doc):
         email=doc.get("email"),
         github_url=doc["github_url"],
         github_username=doc["github_username"],
+        job_title=doc.get("job_title"),
         created_at=doc["created_at"],
         updated_at=doc["updated_at"]
     )
@@ -40,7 +41,7 @@ async def list_users(search: Optional[str] = Query(None), owner=Depends(get_curr
         async for d in cur: items_raw.append(d)
     if search:
         s = search.lower()
-        items_raw = [d for d in items_raw if s in d.get("full_name","").lower() or s in (d.get("email") or "").lower() or s in d.get("github_username","").lower()]
+        items_raw = [d for d in items_raw if s in d.get("full_name","").lower() or s in (d.get("email") or "").lower() or s in d.get("github_username","").lower() or s in (d.get("job_title") or "").lower()]
     items_raw.sort(key=lambda x: x.get("created_at",""), reverse=True)
     return UserListResponse(items=[doc_to_resp(d) for d in items_raw], total=len(items_raw))
 
@@ -57,6 +58,7 @@ async def create_user(payload: InternalUserCreate, owner=Depends(get_current_own
         "email": payload.email.lower() if payload.email else None,
         "github_url": payload.github_url,
         "github_username": username,
+        "job_title": payload.job_title.strip() if payload.job_title and payload.job_title.strip() else None,
         "created_at": utc_now(),
         "updated_at": utc_now(),
     }
@@ -87,6 +89,8 @@ async def update_user(user_id: str, payload: InternalUserUpdate, owner=Depends(g
             raise HTTPException(status_code=400, detail="Invalid GitHub URL")
         updates["github_url"] = payload.github_url
         updates["github_username"] = extract_username(payload.github_url)
+    if payload.job_title is not None:
+        updates["job_title"] = payload.job_title.strip() if payload.job_title.strip() else None
     if updates:
         updates["updated_at"] = utc_now()
         await col.update_one({"_id": user_id}, {"$set": updates})

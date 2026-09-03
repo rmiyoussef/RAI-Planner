@@ -5,7 +5,31 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --muted: 214 32% 96%;
+    --muted-foreground: 215 16% 47%;
+    --border: 214 32% 91%;
+    --primary-light: 214 100% 97%;
+    --ring: 221 83% 53%;
+  }
+  .dark {
+    --background: 222 47% 5%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 11%;
+    --card-foreground: 210 40% 98%;
+    --muted: 217 32% 17%;
+    --muted-foreground: 215 20% 65%;
+    --border: 217 19% 27%;
+    --primary-light: 217 33% 17%;
+    --ring: 221 83% 53%;
+    color-scheme: dark;
+  }
   * { @apply border-border; }
+  html { @apply scroll-smooth; }
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-family: 'Plus Jakarta Sans', Inter, system-ui, -apple-system, sans-serif;
@@ -30,6 +54,8 @@
   ::-webkit-scrollbar-track { @apply bg-muted; }
   ::-webkit-scrollbar-thumb { @apply bg-border rounded-full; }
   ::-webkit-scrollbar-thumb:hover { @apply bg-muted-foreground/30; }
+  .dark ::-webkit-scrollbar-track { @apply bg-slate-800; }
+  .dark ::-webkit-scrollbar-thumb { @apply bg-slate-700; }
 
   /* Glass card - for business premium feel */
   .glass-card {
@@ -55,43 +81,117 @@
     @apply bg-transparent hover:bg-muted text-foreground;
   }
   .btn-outline {
-    @apply border border-border bg-card hover:bg-muted text-foreground;
+    @apply border border-border bg-card hover:bg-muted text-foreground dark:hover:bg-slate-800;
   }
   .btn-sm { @apply px-3 py-1.5 text-xs rounded-lg; }
 
   /* Card */
   .card {
-    @apply bg-card border border-border rounded-2xl p-5 shadow-soft transition-shadow hover:shadow-medium;
+    @apply bg-card border border-border rounded-2xl p-5 shadow-soft transition-colors hover:shadow-medium dark:shadow-none;
   }
   .card-glass {
     @apply glass-card rounded-2xl p-6;
   }
 
-  /* Badge */
+  /* Badge — full dark support */
   .badge {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border;
   }
-  .badge-primary { @apply bg-primary-light text-primary border-primary/20; }
-  .badge-success { @apply bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300; }
-  .badge-warn { @apply bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300; }
-  .badge-danger { @apply bg-red-50 text-red-700 border-red-200; }
+  .badge-primary { @apply bg-primary-light text-primary border-primary/20 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-900; }
+  .badge-success { @apply bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-900; }
+  .badge-warn { @apply bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-900; }
+  .badge-danger { @apply bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900; }
   .badge-muted { @apply bg-muted text-muted-foreground border-border; }
 
-  /* Input */
+  /* Input — dark aware via CSS variables */
   .input {
-    @apply w-full rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm
+    @apply w-full rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm text-foreground
            placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20
-           disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+           disabled:opacity-50 disabled:cursor-not-allowed transition-colors
+           dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500;
   }
 
   /* Table */
   .table { @apply w-full text-sm; }
-  .table th { @apply px-4 py-3 text-left font-semibold text-muted-foreground bg-muted/50 border-b border-border; }
+  .table th { @apply px-4 py-3 text-left font-semibold text-muted-foreground bg-muted/50 border-b border-border dark:bg-slate-800/50; }
   .table td { @apply px-4 py-3.5 border-b border-border/50; }
+  .table tr:hover td { @apply bg-muted/20 dark:bg-slate-800/30; }
 
   /* Sidebar nav active */
   .nav-item-active {
     @apply bg-primary text-white shadow-sm;
+  }
+
+  /* Markdown preview — polished engineering-doc style (light/dark) */
+  .markdown-preview {
+    @apply text-sm leading-relaxed text-foreground;
+  }
+  .markdown-preview h1 {
+    @apply text-2xl font-bold tracking-tight text-foreground mt-6 mb-3 pb-2 border-b border-border;
+  }
+  .markdown-preview h2 {
+    @apply text-xl font-bold tracking-tight text-foreground mt-6 mb-3 pb-1.5 border-b border-border/60;
+  }
+  .markdown-preview h3 {
+    @apply text-base font-semibold text-foreground mt-5 mb-2;
+  }
+  .markdown-preview h4 {
+    @apply text-sm font-semibold tracking-wide uppercase text-muted-foreground mt-4 mb-2;
+  }
+  .markdown-preview p {
+    @apply my-3 leading-relaxed;
+  }
+  .markdown-preview a {
+    @apply text-primary underline decoration-primary/30 underline-offset-2 hover:decoration-primary font-medium;
+  }
+  .markdown-preview strong {
+    @apply font-semibold text-foreground;
+  }
+  .markdown-preview em {
+    @apply italic text-foreground;
+  }
+  .markdown-preview ul {
+    @apply my-3 ml-5 list-disc space-y-1;
+  }
+  .markdown-preview ol {
+    @apply my-3 ml-5 list-decimal space-y-1;
+  }
+  .markdown-preview li {
+    @apply leading-relaxed;
+  }
+  .markdown-preview blockquote {
+    @apply my-4 border-l-4 border-primary/30 bg-primary-light/40 dark:bg-primary/10 rounded-r-xl pl-4 pr-3 py-2.5 text-sm italic text-muted-foreground;
+  }
+  .markdown-preview code {
+    @apply rounded-md bg-muted border border-border/50 px-1.5 py-0.5 font-mono text-xs font-medium text-foreground dark:bg-slate-800 dark:border-slate-700;
+  }
+  .markdown-preview pre {
+    @apply my-4 overflow-x-auto rounded-xl border border-border bg-slate-900 dark:bg-slate-950 p-4 shadow-sm;
+  }
+  .markdown-preview pre code {
+    @apply bg-transparent border-0 p-0 text-sm leading-relaxed text-slate-100 dark:text-slate-200 whitespace-pre;
+  }
+  .markdown-preview table {
+    @apply my-4 w-full overflow-hidden rounded-xl border border-border text-sm;
+  }
+  .markdown-preview thead {
+    @apply bg-muted/60 dark:bg-slate-800;
+  }
+  .markdown-preview th {
+    @apply px-3 py-2 text-left text-xs font-semibold tracking-wide uppercase text-muted-foreground border-b border-border;
+  }
+  .markdown-preview td {
+    @apply px-3 py-2 border-b border-border/50 text-sm;
+  }
+  .markdown-preview tr:last-child td {
+    @apply border-b-0;
+  }
+  .markdown-preview hr {
+    @apply my-6 border-t border-border;
+  }
+  /* Checklist rendering via ☐/☑ */
+  .markdown-preview li:has(> input[type="checkbox"]) {
+    @apply list-none;
   }
 }
 
@@ -109,4 +209,9 @@
     animation: shimmer 1.5s infinite;
   }
   @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+  /* Dark mode uses darker shimmer */
+  .dark .shimmer {
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+    background-size: 200% 100%;
+  }
 }

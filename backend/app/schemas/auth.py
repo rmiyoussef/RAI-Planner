@@ -6,6 +6,8 @@ class SignupRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     confirm_password: str
+    company_name: Optional[str] = Field(default=None, min_length=1, max_length=150, description="Company / workspace name")
+    company_logo: Optional[str] = Field(default=None, description="Base64 data URL or image URL for company logo")
 
 class LoginRequest(BaseModel):
     email: EmailStr

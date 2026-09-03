@@ -157,7 +157,7 @@ export function Users() {
               <UsersIcon className="h-5 w-5" />
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-[1.75rem]">Users</h1>
-            <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-primary/10 bg-primary-light px-2.5 py-1 text-xs font-bold text-primary">
+            <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-primary/10 bg-primary-light px-2.5 py-1 text-xs font-bold text-primary dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
               <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
               Internal only
             </span>
@@ -224,7 +224,7 @@ export function Users() {
         >
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-primary/10 bg-primary-light text-primary">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-primary/10 bg-primary-light text-primary dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
                 <UserPlus className="h-5 w-5" aria-hidden="true" />
               </div>
               <div>
@@ -347,7 +347,7 @@ export function Users() {
               <Hash className="h-3.5 w-3.5" aria-hidden="true" />
               {items.length} {items.length === 1 ? 'member' : 'members'}
             </span>
-            <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-primary/10 bg-primary-light px-2.5 py-1 text-[11px] font-semibold text-primary">
+            <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-primary/10 bg-primary-light px-2.5 py-1 text-[11px] font-semibold text-primary dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
               <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" aria-hidden="true" />
               Managed
             </span>
@@ -581,7 +581,7 @@ export function Users() {
 
       {/* Trust note */}
       <div className="flex items-start gap-3 rounded-2xl border border-border bg-card px-4 py-3.5 shadow-soft">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary border border-primary/10">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary border border-primary/10 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
           <ShieldCheck className="h-4 w-4" aria-hidden="true" />
         </div>
         <div className="space-y-1">

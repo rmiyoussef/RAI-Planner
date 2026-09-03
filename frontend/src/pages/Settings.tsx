@@ -32,9 +32,12 @@ import {
   ToggleLeft,
   ToggleRight,
   Hash,
+  Building2,
+  Image as ImageIcon,
+  Upload,
 } from 'lucide-react'
 
-type Tab = 'profile' | 'ai' | 'agent'
+type Tab = 'profile' | 'company' | 'ai' | 'agent'
 
 export function Settings() {
   const { owner, refresh } = useAuth()
@@ -47,6 +50,8 @@ export function Settings() {
   const [systemPrompt, setSystemPrompt] = useState('')
   const [skills, setSkills] = useState<any[]>([])
   const [skillForm, setSkillForm] = useState({ name: '', description: '', instructions: '', enabled: true })
+  const [company, setCompany] = useState<{ company_name: string; company_logo: string | null }>({ company_name: '', company_logo: null })
+  const [companyPreview, setCompanyPreview] = useState<string | null>(null)
   const [msg, setMsg] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -81,10 +86,48 @@ export function Settings() {
     }
   }
 
+  async function loadCompany() {
+    try {
+      const data = await api.get('/settings/company')
+      setCompany({ company_name: data.company_name || '', company_logo: data.company_logo || null })
+      setCompanyPreview(data.company_logo || null)
+    } catch (e: any) {
+      setError(e.message)
+    }
+  }
+
+  function onCompanyLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 1024 * 1024) { setError('Logo must be under 1MB'); return }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = reader.result as string
+      setCompany((c) => ({ ...c, company_logo: dataUrl }))
+      setCompanyPreview(dataUrl)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  async function saveCompany() {
+    if (!company.company_name.trim()) { setError('Company name is required'); return }
+    setSaving(true)
+    try {
+      const data = await api.put('/settings/company', { company_name: company.company_name.trim(), company_logo: company.company_logo || '' })
+      setCompany({ company_name: data.company_name, company_logo: data.company_logo })
+      setCompanyPreview(data.company_logo)
+      flashSuccess('Company branding updated')
+      // notify layout to refresh — via storage event
+      try { localStorage.setItem('rai_company_updated', Date.now().toString()) } catch {}
+      window.dispatchEvent(new Event('rai_company_updated'))
+    } catch (e: any) { flashError(e) } finally { setSaving(false) }
+  }
+
   useEffect(() => {
     loadAI()
     loadAgent()
     loadSkills()
+    loadCompany()
   }, [])
   useEffect(() => {
     if (owner) setProfile({ full_name: owner.full_name, email: owner.email })
@@ -238,6 +281,7 @@ export function Settings() {
 
   const tabs: { id: Tab; label: string; icon: any; desc: string }[] = [
     { id: 'profile', label: 'Profile', icon: User, desc: 'Account & security' },
+    { id: 'company', label: 'Company', icon: Building2, desc: 'Branding & logo' },
     { id: 'ai', label: 'AI Configuration', icon: Cpu, desc: 'Model & provider' },
     { id: 'agent', label: 'Agent', icon: Bot, desc: 'Prompt & skills' },
   ]
@@ -251,7 +295,7 @@ export function Settings() {
             <SettingsIcon className="h-5 w-5" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-[1.75rem]">Settings</h1>
-          <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-primary/10 bg-primary-light px-2.5 py-1 text-[11px] font-bold tracking-wide text-primary">
+          <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-primary/10 bg-primary-light px-2.5 py-1 text-[11px] font-bold tracking-wide text-primary dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
             <Shield className="h-3 w-3" aria-hidden="true" />
             OWNER ONLY
           </span>
@@ -317,7 +361,7 @@ export function Settings() {
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <div className="card space-y-5">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-light text-primary border border-primary/10">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-light text-primary border border-primary/10 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
                     <User className="h-5 w-5" aria-hidden="true" />
                   </div>
                   <div>
@@ -415,6 +459,94 @@ export function Settings() {
             </div>
           )}
 
+          {/* Company / Branding */}
+          {tab === 'company' && (
+            <div className="mx-auto max-w-3xl space-y-6">
+              <div className="card space-y-5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-secondary text-white shadow-sm">
+                    <Building2 className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-[15px] font-semibold tracking-tight text-foreground">Company Branding</h3>
+                    <p className="text-xs font-medium text-muted-foreground">Shown in the top-left menu. Logo is optional — random icon fallback if empty.</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label htmlFor="company-name" className="text-xs font-semibold tracking-wide text-foreground flex items-center gap-1.5">
+                      <Building2 className="h-3.5 w-3.5 text-muted-foreground" /> Company name <span className="text-destructive">*</span>
+                    </label>
+                    <input
+                      id="company-name"
+                      value={company.company_name}
+                      onChange={(e) => setCompany({ ...company, company_name: e.target.value })}
+                      placeholder="Acme Inc."
+                      className="input"
+                      maxLength={150}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold tracking-wide text-foreground flex items-center gap-1.5">
+                      <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" /> Company logo <span className="text-xs font-normal text-muted-foreground">(optional, max 1MB)</span>
+                    </label>
+                    <div className="flex gap-4">
+                      <div className="h-20 w-20 rounded-2xl border border-border bg-muted/20 flex items-center justify-center overflow-hidden shrink-0">
+                        {companyPreview ? (
+                          <img src={companyPreview} alt="Company logo" className="h-full w-full object-cover" />
+                        ) : (
+                          <Building2 className="w-8 h-8 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        <div className="flex flex-wrap gap-2">
+                          <label className="btn btn-outline btn-sm cursor-pointer gap-1.5">
+                            <Upload className="w-3.5 h-3.5" /> Upload image
+                            <input type="file" accept="image/*" className="hidden" onChange={onCompanyLogoFile} />
+                          </label>
+                          {companyPreview && (
+                            <button type="button" onClick={() => { setCompany({ ...company, company_logo: null }); setCompanyPreview(null) }} className="btn btn-ghost btn-sm gap-1.5">
+                              <X className="w-3.5 h-3.5" /> Remove logo
+                            </button>
+                          )}
+                        </div>
+                        <div className="space-y-1.5">
+                          <label htmlFor="company-logo-url" className="text-[11px] font-semibold tracking-wide text-muted-foreground">Or paste image URL / data URL</label>
+                          <input
+                            id="company-logo-url"
+                            value={company.company_logo || ''}
+                            onChange={(e) => { const v = e.target.value; setCompany({ ...company, company_logo: v || null }); setCompanyPreview(v || null) }}
+                            placeholder="https://example.com/logo.png or data:image/..."
+                            className="input font-mono text-xs"
+                          />
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">If no logo, a random icon is shown in the menu. Stored as data URL — no external hosting needed.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <button type="button" onClick={saveCompany} disabled={saving} className="btn btn-primary gap-2 disabled:opacity-50">
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save branding
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border bg-muted/20 p-4 flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-card border border-border flex items-center justify-center overflow-hidden">
+                  {companyPreview ? <img src={companyPreview} alt="preview" className="h-full w-full object-cover" /> : <Building2 className="w-5 h-5 text-muted-foreground" />}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">{company.company_name || '—'}</p>
+                  <p className="text-xs text-muted-foreground">Preview as shown in top-left menu</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* AI Configuration */}
           {tab === 'ai' && (
             <div className="mx-auto max-w-3xl space-y-6">
@@ -435,7 +567,7 @@ export function Settings() {
                   </span>
                 </div>
 
-                <div className="rounded-xl border border-primary/10 bg-primary-light/40 px-3.5 py-3 dark:bg-primary/10 flex items-start gap-2.5">
+                <div className="rounded-xl border border-primary/10 bg-primary-light/40 px-3.5 py-3 dark:bg-blue-950/30 dark:border-blue-900/30 flex items-start gap-2.5">
                   <Sparkles className="h-4 w-4 mt-0.5 text-primary shrink-0" aria-hidden="true" />
                   <p className="text-xs leading-relaxed font-medium text-primary">
                     Connect any OpenAI-compatible provider. Saving automatically restarts the agent to apply the new model.
@@ -625,7 +757,7 @@ export function Settings() {
               {/* System prompt */}
               <div className="card space-y-4">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-light text-primary border border-primary/10">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-light text-primary border border-primary/10 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
                     <FileText className="h-5 w-5" aria-hidden="true" />
                   </div>
                   <div>
@@ -815,7 +947,7 @@ export function Settings() {
 
       {/* Footer trust */}
       <div className="flex items-start gap-3 rounded-2xl border border-border bg-card px-4 py-3.5 shadow-soft">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary border border-primary/10">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary border border-primary/10 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
           <Shield className="h-4 w-4" aria-hidden="true" />
         </div>
         <div className="space-y-1">

@@ -3,6 +3,10 @@ from functools import lru_cache
 from typing import List
 
 class Settings(BaseSettings):
+    # PostgreSQL (primary) — replaces MongoDB
+    POSTGRES_URI: str = "postgresql://rami@127.0.0.1:5433/rai_planner"
+    POSTGRES_DATABASE: str = "rai_planner"
+    # Kept for backwards compat — not used (MongoDB removed)
     MONGODB_URI: str = ""
     MONGODB_DATABASE: str = "rai_planner"
     JWT_SECRET: str = "change-me-in-production-please-use-long-random"

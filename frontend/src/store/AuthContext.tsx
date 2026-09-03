@@ -8,7 +8,7 @@ type AuthState = {
   token: string | null
   loading: boolean
   login: (email: string, password: string) => Promise<void>
-  signup: (full_name: string, email: string, password: string, confirm_password: string) => Promise<void>
+  signup: (full_name: string, email: string, password: string, confirm_password: string, company_name?: string, company_logo?: string | null) => Promise<void>
   logout: () => void
   refresh: () => Promise<void>
 }
@@ -40,8 +40,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(data.access_token)
     setOwner(data.owner)
   }
-  async function signup(full_name: string, email: string, password: string, confirm_password: string) {
-    const data = await api.post('/auth/signup', { full_name, email, password, confirm_password })
+  async function signup(full_name: string, email: string, password: string, confirm_password: string, company_name?: string, company_logo?: string | null) {
+    const data = await api.post('/auth/signup', { full_name, email, password, confirm_password, company_name: company_name || 'My Company', company_logo: company_logo || null })
     localStorage.setItem('rai_token', data.access_token)
     setToken(data.access_token)
     setOwner(data.owner)

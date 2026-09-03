@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from app.schemas.agent import AIConfigRequest, AIConfigResponse, SkillCreate, SkillUpdate, SkillResponse, AgentSettingsRequest, AgentStatusResponse
+from app.schemas.company import CompanyResponse, CompanyUpdateRequest
 from app.core.database import get_collection, new_id, utc_now
 from app.api.deps import get_current_owner
 from app.core.security import encrypt_secret, decrypt_secret, mask_secret
@@ -113,3 +114,86 @@ async def delete_skill(skill_id: str, owner=Depends(get_current_owner)):
     if not ok:
         raise HTTPException(status_code=404, detail="Skill not found")
     return {"message": "deleted"}
+
+# Company / Workspace branding
+@router.get("/company", response_model=CompanyResponse)
+async def get_company(owner=Depends(get_current_owner)):
+    col = get_collection("company_settings")
+    doc = await col.find_one({"owner_id": owner["_id"]})
+    # fallback: if no company yet, return default based on owner
+    if not doc:
+        now = utc_now()
+        return CompanyResponse(
+            id="default",
+            owner_id=owner["_id"],
+            company_name="RAI Planner",
+            company_logo=None,
+            created_at=owner.get("created_at", now),
+            updated_at=owner.get("updated_at", now),
+        )
+    return CompanyResponse(
+        id=doc["_id"],
+        owner_id=doc["owner_id"],
+        company_name=doc["company_name"],
+        company_logo=doc.get("company_logo"),
+        created_at=doc["created_at"],
+        updated_at=doc["updated_at"],
+    )
+
+@router.put("/company", response_model=CompanyResponse)
+async def put_company(payload: CompanyUpdateRequest, owner=Depends(get_current_owner)):
+    col = get_collection("company_settings")
+    doc = await col.find_one({"owner_id": owner["_id"]})
+    now = utc_now()
+    if not doc:
+        # create
+        if not payload.company_name:
+            raise HTTPException(status_code=400, detail="Company name is required")
+        new_doc = {
+            "_id": new_id(),
+            "owner_id": owner["_id"],
+            "company_name": payload.company_name.strip(),
+            "company_logo": payload.company_logo.strip() if payload.company_logo and payload.company_logo.strip() else None,
+            "created_at": now,
+            "updated_at": now,
+        }
+        await col.insert_one(new_doc)
+        doc = new_doc
+    else:
+        updates: dict = {}
+        if payload.company_name is not None:
+            if not payload.company_name.strip():
+                raise HTTPException(status_code=400, detail="Company name cannot be empty")
+            updates["company_name"] = payload.company_name.strip()
+        if payload.company_logo is not None:
+            # allow empty string to clear logo
+            val = payload.company_logo.strip()
+            updates["company_logo"] = val if val else None
+        if updates:
+            updates["updated_at"] = now
+            await col.update_one({"owner_id": owner["_id"]}, {"$set": updates})
+            doc = await col.find_one({"owner_id": owner["_id"]})
+    return CompanyResponse(
+        id=doc["_id"],
+        owner_id=doc["owner_id"],
+        company_name=doc["company_name"],
+        company_logo=doc.get("company_logo"),
+        created_at=doc["created_at"],
+        updated_at=doc["updated_at"],
+    )
+
+@router.get("/company/public")
+async def get_company_public():
+    """Public company info for login/signup branding — no auth needed. Returns first workspace company if exists."""
+    col = get_collection("company_settings")
+    cur = await col.find({})
+    try:
+        items = await cur.to_list(length=None)
+    except:
+        items = []
+        async for d in cur:
+            items.append(d)
+    if not items:
+        return {"company_name": None, "company_logo": None, "initialized": False}
+    doc = items[0]
+    return {"company_name": doc.get("company_name"), "company_logo": doc.get("company_logo"), "initialized": True}

@@ -6,13 +6,15 @@ services:
       - "8000:8000"
     env_file: .env
     environment:
-      - MONGODB_URI=${MONGODB_URI}
-      - MONGODB_DATABASE=${MONGODB_DATABASE:-rai_planner}
+      - POSTGRES_URI=${POSTGRES_URI:-postgresql://rami@postgres:5432/rai_planner}
+      - MONGODB_URI=${MONGODB_URI:-}
       - JWT_SECRET=${JWT_SECRET}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173}
     volumes:
       - ./backend:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      - postgres
 
   frontend:
     build: ./frontend
@@ -26,12 +28,22 @@ services:
       - /app/node_modules
     command: npm run dev -- --host
 
-# MongoDB Atlas is production target; for local dev you can uncomment:
-#  mongo:
-#    image: mongo:7
-#    ports:
-#      - "27017:27017"
-#    volumes:
-#      - mongo_data:/data/db
-#volumes:
-#  mongo_data:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=rami
+      - POSTGRES_PASSWORD=
+      - POSTGRES_DB=rai_planner
+      - POSTGRES_HOST_AUTH_METHOD=trust
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rami -d rai_planner"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+
+volumes:
+  postgres_data:

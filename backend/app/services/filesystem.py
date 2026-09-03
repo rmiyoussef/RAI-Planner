@@ -81,6 +81,46 @@ def brain_status(project_path: str) -> Dict[str, Any]:
         info["message"] = "the ai tool need to instal on this project"
     return info
 
+def read_brain_file(project_path: str, rel_path: str) -> Dict[str, Any]:
+    """Safely read a single file from .brain and return its content. Validates path traversal and file type."""
+    if not rel_path or rel_path.strip() == "":
+        return {"ok": False, "error": "File path is required"}
+    # normalize rel_path - prevent absolute and traversal
+    rel_path = rel_path.strip().lstrip("/")
+    if ".." in pathlib.Path(rel_path).parts:
+        return {"ok": False, "error": "Invalid file path"}
+    p = pathlib.Path(project_path)
+    ok, err = _within_projects_root(p)
+    if not ok:
+        return {"ok": False, "error": err}
+    brain = (p / ".brain").resolve()
+    if not brain.exists() or not brain.is_dir():
+        return {"ok": False, "error": "No .brain directory found"}
+    # resolve target and ensure it stays inside brain
+    target = (brain / rel_path).resolve()
+    try:
+        target.relative_to(brain)
+    except ValueError:
+        return {"ok": False, "error": "Access denied — path outside .brain"}
+    if not target.exists() or not target.is_file():
+        return {"ok": False, "error": "File not found"}
+    # skip sensitive, binary, large
+    if target.name in SENSITIVE_NAMES:
+        return {"ok": False, "error": "Access to this file is restricted"}
+    if target.suffix.lower() in BINARY_EXTS or target.suffix.lower() in SENSITIVE_EXTS:
+        return {"ok": False, "error": "Binary file cannot be previewed"}
+    try:
+        size = target.stat().st_size
+        if size > MAX_FILE_SIZE:
+            return {"ok": False, "error": f"File too large ({size} bytes, limit {MAX_FILE_SIZE})"}
+        content = target.read_text(encoding="utf-8", errors="ignore")
+        # limit content length
+        if len(content) > MAX_CONTEXT_CHARS:
+            content = content[:MAX_CONTEXT_CHARS] + "\n\n— truncated —"
+        return {"ok": True, "path": str(rel_path), "content": content, "size": size}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
 def collect_project_context(project_path: str, max_bytes: int = 200_000) -> Dict[str, Any]:
     """Build concise project context respecting limits and safety."""
     base = pathlib.Path(project_path).resolve()

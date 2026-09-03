@@ -150,3 +150,18 @@ async def brain_info(project_id: str, owner=Depends(get_current_owner)):
     if not doc:
         raise HTTPException(status_code=404, detail="Project not found")
     return brain_status(doc.get("project_path",""))
+
+@router.get("/{project_id}/brain/file")
+async def brain_file(project_id: str, path: str = Query(..., min_length=1, description="Relative path inside .brain"), owner=Depends(get_current_owner)):
+    col = get_collection("projects")
+    doc = await col.find_one({"_id": project_id, "owner_id": owner["_id"]})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project_path = doc.get("project_path", "")
+    if not project_path:
+        raise HTTPException(status_code=400, detail="Project path not configured")
+    from app.services.filesystem import read_brain_file
+    result = read_brain_file(project_path, path)
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Cannot read file"))
+    return result

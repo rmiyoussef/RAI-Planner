@@ -188,7 +188,7 @@ export function Projects() {
         >
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-light text-primary border border-primary/10">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-light text-primary border border-primary/10 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
                 <Plus className="h-5 w-5" aria-hidden="true" />
               </div>
               <div>
@@ -384,7 +384,7 @@ export function Projects() {
                       </span>
                     </td>
                     <td className="text-center">
-                      <span className="inline-flex min-w-7 justify-center rounded-full bg-primary-light px-2 py-1 text-xs font-bold tabular-nums text-primary border border-primary/10">
+                      <span className="inline-flex min-w-7 justify-center rounded-full bg-primary-light px-2 py-1 text-xs font-bold tabular-nums text-primary border border-primary/10 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
                         {p.task_count ?? 0}
                       </span>
                     </td>

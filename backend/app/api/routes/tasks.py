@@ -133,23 +133,34 @@ async def get_task(task_id: str, owner=Depends(get_current_owner)):
         raise HTTPException(status_code=404, detail="Task not found")
     return await enrich_task(doc, owner["_id"])
 
-@router.put("/{task_id}", response_model=TaskResponse)
-async def update_task(task_id: str, payload: TaskUpdate, owner=Depends(get_current_owner)):
+async def _perform_task_update(task_id: str, payload: TaskUpdate, owner) -> TaskResponse:
     col = get_collection("tasks")
     doc = await col.find_one({"_id": task_id, "owner_id": owner["_id"]})
     if not doc:
         raise HTTPException(status_code=404, detail="Task not found")
-    # capture changes
+    # Determine which fields were explicitly provided (supports clearing assigned_to with null)
+    provided = payload.model_fields_set if hasattr(payload, "model_fields_set") else {k for k in ["title","description","priority","status","assigned_to","tags"] if getattr(payload, k) is not None}
+    # validate assigned_to when explicitly provided and non-null
+    if "assigned_to" in provided and payload.assigned_to is not None and payload.assigned_to != "":
+        u = await get_collection("users").find_one({"_id": payload.assigned_to, "owner_id": owner["_id"]})
+        if not u:
+            raise HTTPException(status_code=400, detail="Assigned user not found")
+    # capture changes — only for fields that were provided
     changes = []
-    updates = {}
+    updates: dict = {}
     for field in ["title","description","priority","status","assigned_to","tags"]:
+        if field not in provided:
+            continue
         new_val = getattr(payload, field)
-        if new_val is not None:
-            old_val = doc.get(field)
-            if old_val != new_val:
-                changes.append({"field": field, "old_value": old_val, "new_value": new_val})
-                updates[field] = new_val
-    if not updates:
+        # normalize empty string for assigned_to as None (clear)
+        if field == "assigned_to" and new_val == "":
+            new_val = None
+        old_val = doc.get(field)
+        # normalize both sides for comparison (None vs missing)
+        if old_val != new_val:
+            changes.append({"field": field, "old_value": old_val, "new_value": new_val})
+            updates[field] = new_val
+    if not changes:
         return await enrich_task(doc, owner["_id"])
     # version bump if content fields changed
     content_fields = {"title","description","priority","status","assigned_to","tags"}
@@ -191,6 +202,16 @@ async def update_task(task_id: str, payload: TaskUpdate, owner=Depends(get_curre
     })
     updated = await col.find_one({"_id": task_id})
     return await enrich_task(updated, owner["_id"])
+
+
+@router.put("/{task_id}", response_model=TaskResponse)
+async def update_task(task_id: str, payload: TaskUpdate, owner=Depends(get_current_owner)):
+    return await _perform_task_update(task_id, payload, owner)
+
+
+@router.patch("/{task_id}", response_model=TaskResponse)
+async def patch_task(task_id: str, payload: TaskUpdate, owner=Depends(get_current_owner)):
+    return await _perform_task_update(task_id, payload, owner)
 
 @router.delete("/{task_id}")
 async def delete_task(task_id: str, owner=Depends(get_current_owner)):

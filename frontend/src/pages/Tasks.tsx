@@ -90,10 +90,23 @@ export function Tasks() {
   async function load() {
     setLoading(true)
     try {
-      const q = new URLSearchParams()
-      if (filterProject) q.set('project_id', filterProject)
-      const data = await api.get(`/tasks?${q.toString()}`)
-      setItems(data.items ?? [])
+      // fetch all pages (limit 100 max) to support 1000+ tasks with client pagination
+      const all: any[] = []
+      let page = 1
+      let total = 0
+      do {
+        const q = new URLSearchParams()
+        if (filterProject) q.set('project_id', filterProject)
+        q.set('page', String(page))
+        q.set('limit', '100')
+        const data = await api.get(`/tasks?${q.toString()}`)
+        all.push(...(data.items ?? []))
+        total = data.total ?? (data.items?.length ?? 0)
+        if ((data.items?.length ?? 0) < 100) break
+        page++
+        if (page > 20) break // safety
+      } while (all.length < total)
+      setItems(all)
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -457,9 +470,9 @@ export function Tasks() {
 
   return (
     <>
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 h-[calc(100dvh-125px)] overflow-hidden">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between shrink-0">
         <div className="space-y-1.5">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-white shadow-sm" aria-hidden="true">
@@ -504,7 +517,7 @@ export function Tasks() {
       )}
 
       {/* Project scope selector (keeps existing UX, complements Saved Views) */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between shrink-0">
         <div className="relative w-full sm:max-w-[240px]">
           <label htmlFor="task-project-filter" className="sr-only">Project scope</label>
           <FolderKanban className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
@@ -523,18 +536,13 @@ export function Tasks() {
           </select>
           <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
         </div>
-        {!loading && (
-          <span className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:inline-flex">
-            <span className="h-2 w-2 rounded-full bg-emerald-500" /> Plane/Linear-style view · filters persist per user
-          </span>
-        )}
       </div>
 
       {/* Create form */}
       {showCreate && (
         <div
           id="create-task-card"
-          className="card space-y-5 border-primary/10 shadow-glass animate-in motion-reduce:animate-none"
+          className="card space-y-5 border-primary/10 shadow-glass animate-in motion-reduce:animate-none shrink-0 max-h-[40vh] overflow-auto"
         >
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -698,26 +706,28 @@ export function Tasks() {
         </div>
       )}
 
-      {/* Plane/Linear-style TaskListView */}
-      {loading ? (
-        <div className="flex items-center justify-center gap-2.5 rounded-2xl border border-border bg-card py-12 text-sm font-medium text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-          Loading tasks...
-        </div>
-      ) : (
-        <TaskListView
-          tasks={taskItems}
-          users={users}
-          projects={projects}
-          activeProjectId={filterProject || null}
-          activeProjectName={activeProjectName}
-          ownerId={owner?.id ?? null}
-          onTaskClick={(t) => openTask(t.id)}
-          onTaskPatch={handleInlinePatch}
-          onTaskCreate={handleCreateInGroup}
-          workflowsCount={projects.length}
-        />
-      )}
+      {/* Plane/Linear-style TaskListView — fills height, only tasks scroll */}
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+        {loading ? (
+          <div className="flex items-center justify-center gap-2.5 rounded-2xl border border-border bg-card py-12 text-sm font-medium text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+            Loading tasks...
+          </div>
+        ) : (
+          <TaskListView
+            tasks={taskItems}
+            users={users}
+            projects={projects}
+            activeProjectId={filterProject || null}
+            activeProjectName={activeProjectName}
+            ownerId={owner?.id ?? null}
+            onTaskClick={(t) => openTask(t.id)}
+            onTaskPatch={handleInlinePatch}
+            onTaskCreate={handleCreateInGroup}
+            workflowsCount={projects.length}
+          />
+        )}
+      </div>
       </div>
 
       {/* Drawer — 50-65% width on desktop - outside animated container to avoid fixed-offset white gap */}

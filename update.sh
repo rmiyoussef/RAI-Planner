@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-# RAI Planner — Update Script (version-aware)
+# RAI Planner — Update Script (production-ready, version-aware)
 # Usage:
 #   ./update.sh                # update current clone
 #   ./scripts/update.sh        # same
@@ -9,10 +9,8 @@ set -e
 #
 # What it does:
 #   1. Finds repo root (where VERSION lives)
-#   2. Fetches remote
-#   3. Compares local VERSION vs remote VERSION (and git tags)
-#   4. If outdated, pulls latest (staging or main), reinstalls deps, rebuilds
-#   5. Prints new version
+#   2. Fetches remote, compares local VERSION vs remote VERSION
+#   3. If outdated, pulls latest (staging or main), patches .env with new keys, reinstalls deps, rebuilds, migrates DB
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Resolve root
@@ -147,6 +145,28 @@ NEW_VER=$(cat VERSION 2>/dev/null | tr -d '[:space:]' || echo "$REMOTE_VER")
 echo ""
 echo "→ New version: v$NEW_VER"
 
+# Patch .env with new keys from .env.example without overwriting
+if [ -f ".env.example" ] && [ -f ".env" ]; then
+  echo "→ Patching .env with new keys..."
+  while IFS= read -r line; do
+    [[ "$line" =~ ^#.*$ ]] && continue
+    [[ -z "$line" ]] && continue
+    key=$(echo "$line" | cut -d= -f1)
+    if ! grep -q "^${key}=" .env 2>/dev/null; then
+      echo "  + Adding $key"
+      echo "$line" >> .env
+    fi
+  done < .env.example
+  # ensure frontend/.env has VITE_ keys
+  mkdir -p frontend
+  for k in VITE_API_URL VITE_APP_NAME; do
+    if ! grep -q "^${k}=" frontend/.env 2>/dev/null; then
+      val=$(grep "^${k}=" .env 2>/dev/null | cut -d= -f2- || echo "")
+      if [ -n "$val" ]; then echo "${k}=${val}" >> frontend/.env; echo "  + Added $k to frontend/.env"; fi
+    fi
+  done
+fi
+
 # Reinstall / rebuild
 echo "→ Reinstalling dependencies..."
 if [ -f "install.sh" ]; then
@@ -163,6 +183,16 @@ else
   fi
 fi
 
+# DB migration is automatic on backend start (init_db creates tables, migrates .memory_db.json if postgres empty)
+echo ""
+echo "→ Ensuring PostgreSQL..."
+if [ -d "$ROOT/pgdata" ] && command -v pg_ctl >/dev/null 2>&1; then
+  if ! /usr/lib/postgresql/18/bin/pg_isready -h 127.0.0.1 -p 5433 -U rami -d rai_planner >/dev/null 2>&1; then
+    echo "  Starting pgdata on :5433..."
+    /usr/lib/postgresql/18/bin/pg_ctl -D "$ROOT/pgdata" -l "$ROOT/logs/pg.log" start >/dev/null 2>&1 || true
+  fi
+fi
+
 echo ""
 echo "=========================================="
 echo "  Updated — RAI Planner v$NEW_VER"
@@ -171,6 +201,5 @@ echo "  Branch: $(git rev-parse --abbrev-ref HEAD)"
 echo "  Commit: $(git rev-parse --short HEAD)"
 echo "=========================================="
 echo "Restart services:"
-echo "  backend:  cd backend && source .venv/bin/activate && uvicorn app.main:app --reload"
-echo "  frontend: cd frontend && npm run dev"
-echo "  docker:   docker-compose up --build -d"
+echo "  ./start.sh  (or docker-compose up --build -d)"
+echo "  frontend dist already built → nginx serves it"

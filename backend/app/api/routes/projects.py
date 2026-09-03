@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from typing import Optional
 from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse
 from app.core.database import get_collection, new_id, utc_now
 from app.api.deps import get_current_owner
 from app.services.filesystem import brain_status, validate_project_path
+from app.core.ratelimit import rate_limit
 import re
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -71,7 +72,8 @@ async def list_projects(
     return ProjectListResponse(items=result, total=total)
 
 @router.post("", response_model=ProjectResponse)
-async def create_project(payload: ProjectCreate, owner=Depends(get_current_owner)):
+async def create_project(payload: ProjectCreate, request: Request, owner=Depends(get_current_owner)):
+    rate_limit(request, "create_project", limit=30, window_seconds=60)
     col = get_collection("projects")
     project_path = payload.project_path
     if project_path:
@@ -152,7 +154,8 @@ async def brain_info(project_id: str, owner=Depends(get_current_owner)):
     return brain_status(doc.get("project_path",""))
 
 @router.get("/{project_id}/brain/file")
-async def brain_file(project_id: str, path: str = Query(..., min_length=1, description="Relative path inside .brain"), owner=Depends(get_current_owner)):
+async def brain_file(project_id: str, request: Request, path: str = Query(..., min_length=1, max_length=500, description="Relative path inside .brain"), owner=Depends(get_current_owner)):
+    rate_limit(request, "brain_file", limit=60, window_seconds=60)
     col = get_collection("projects")
     doc = await col.find_one({"_id": project_id, "owner_id": owner["_id"]})
     if not doc:

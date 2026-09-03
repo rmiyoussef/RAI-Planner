@@ -1,17 +1,15 @@
 /**
- * <TaskListView> — reusable Plane.so/Linear-style issue tracker
- * Accepts viewConfig object (filters, groupBy, sortBy, visibleColumns)
- * New tabs are just new configs — not new components.
+ * <TaskListView> — simple filters + status chart (no saved view tabs per request)
+ * Filters: project, assignee, status, date, title (free text)
  */
 import { useEffect, useMemo, useState } from 'react'
-import { Lock, Plus, BarChart3, Workflow, PanelRight, CheckSquare } from 'lucide-react'
-import type { TaskItem, ViewConfig, SavedView } from './types'
+import { Lock, CheckSquare } from 'lucide-react'
+import type { TaskItem, ViewConfig } from './types'
 import { DEFAULT_VIEW_CONFIG } from './types'
-import { SavedViewTabs } from './SavedViewTabs'
-import { FilterBar } from './FilterBar'
+import { SimpleFilterBar, SimpleFilters } from './SimpleFilterBar'
+import { StatusChart } from './StatusChart'
 import { GroupedTable } from './GroupedTable'
-import { loadViews, saveViews, loadActiveViewId, saveActiveViewId, createView, defaultViews } from './viewStore'
-import { parseQuery, taskMatchesQuery } from './queryParser'
+import { Pagination } from './Pagination'
 
 export type TaskListViewProps = {
   tasks: TaskItem[]
@@ -42,34 +40,30 @@ export function TaskListView({
   onTaskCreate,
   workflowsCount = 3,
 }: TaskListViewProps) {
-  const [views, setViews] = useState<SavedView[]>(() => loadViews(ownerId, activeProjectId))
-  const [activeId, setActiveId] = useState<string>(() => loadActiveViewId(ownerId, activeProjectId) ?? 'backlog')
-  const [internalConfig, setInternalConfig] = useState<ViewConfig>(() => {
-    const vs = loadViews(ownerId, activeProjectId)
-    const active = vs.find((v) => v.id === (loadActiveViewId(ownerId, activeProjectId) ?? 'backlog'))
-    return active?.config ?? { ...DEFAULT_VIEW_CONFIG }
+  const [internalConfig, setInternalConfig] = useState<ViewConfig>(() => ({ ...DEFAULT_VIEW_CONFIG }))
+
+  // simple filters
+  const [filters, setFilters] = useState<SimpleFilters>({
+    project: activeProjectId || '',
+    assignee: '',
+    status: '',
+    date: '',
+    title: '',
   })
-  const [splitOpen, setSplitOpen] = useState(false)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
 
-  // sync when owner/project changes
+  // sync project filter when activeProjectId changes
   useEffect(() => {
-    const loaded = loadViews(ownerId, activeProjectId)
-    setViews(loaded)
-    const aid = loadActiveViewId(ownerId, activeProjectId) ?? loaded[0]?.id ?? 'backlog'
-    setActiveId(aid)
-    const av = loaded.find((v) => v.id === aid)
-    if (av && !controlledConfig) setInternalConfig(av.config)
-  }, [ownerId, activeProjectId])
+    setFilters((f) => ({ ...f, project: activeProjectId || '' }))
+  }, [activeProjectId])
 
-  // active view derived
-  const activeView = useMemo(() => views.find((v) => v.id === activeId) ?? views[0], [views, activeId])
+  // reset to first page when filters change
+  useEffect(() => {
+    setPage(1)
+  }, [filters.project, filters.assignee, filters.status, filters.date, filters.title])
 
-  const effectiveConfig: ViewConfig = controlledConfig ?? activeView?.config ?? internalConfig
-
-  function persistViews(next: SavedView[]) {
-    setViews(next)
-    saveViews(next, ownerId, activeProjectId)
-  }
+  const effectiveConfig: ViewConfig = controlledConfig ?? internalConfig
 
   function updateConfig(patch: Partial<ViewConfig>) {
     const next: ViewConfig = { ...effectiveConfig, ...patch }
@@ -77,104 +71,62 @@ export function TaskListView({
       onViewConfigChange(next)
     } else {
       setInternalConfig(next)
-      // also update active view's stored config
-      const idx = views.findIndex((v) => v.id === activeId)
-      if (idx >= 0) {
-        const nextViews = [...views]
-        nextViews[idx] = { ...nextViews[idx], config: next }
-        persistViews(nextViews)
-      }
     }
   }
 
-  function handleSelectView(id: string) {
-    setActiveId(id)
-    saveActiveViewId(id, ownerId, activeProjectId)
-    const v = views.find((x) => x.id === id)
-    if (v && !controlledConfig) setInternalConfig(v.config)
-  }
-
-  function handleCreateView(name: string) {
-    const nv = createView(name, effectiveConfig, ownerId, activeProjectId)
-    const next = [...views, nv]
-    persistViews(next)
-    handleSelectView(nv.id)
-  }
-
-  function handleRename(id: string, name: string) {
-    const next = views.map((v) => (v.id === id ? { ...v, name } : v))
-    persistViews(next)
-  }
-  function handleDelete(id: string) {
-    if (views.length <= 1) return
-    const next = views.filter((v) => v.id !== id)
-    persistViews(next)
-    if (activeId === id) handleSelectView(next[0].id)
-  }
-  function handleDuplicate(id: string) {
-    const src = views.find((v) => v.id === id)
-    if (!src) return
-    const nv = createView(`${src.name} copy`, src.config, ownerId, activeProjectId)
-    const next = [...views, nv]
-    persistViews(next)
-  }
-
-  const filteredCount = useMemo(() => {
-    const parsed = parseQuery(effectiveConfig.search)
-    if (!parsed.tokens.length && !parsed.freeText) return tasks.length
-    return tasks.filter((t) =>
-      taskMatchesQuery(
-        {
-          title: t.title,
-          status: t.status,
-          priority: t.priority,
-          tags: (t as any).tags ?? (t as any).labels ?? [],
-          labels: (t as any).labels ?? (t as any).tags ?? [],
-          project_name: (t as any).project_name ?? (t as any).module ?? '',
-          module: (t as any).module ?? (t as any).project_name ?? '',
-          iteration: (t as any).iteration ?? '',
-          assigned_user_name: (t as any).assigned_user_name ?? null,
-          assigned_to: (t as any).assigned_to ?? null,
-          description: (t as any).description ?? '',
-        },
-        parsed
-      )
-    ).length
-  }, [tasks, effectiveConfig.search])
-
-  // annotate views with counts
-  const viewsWithCount = useMemo(() => {
-    return views.map((v) => {
-      const p = parseQuery(v.config.search)
-      const c = tasks.filter((t) =>
-        taskMatchesQuery(
-          {
-            title: t.title,
-            status: t.status,
-            priority: t.priority,
-            tags: (t as any).tags ?? (t as any).labels ?? [],
-            labels: (t as any).labels ?? (t as any).tags ?? [],
-            project_name: (t as any).project_name ?? (t as any).module ?? '',
-            module: (t as any).module ?? (t as any).project_name ?? '',
-            iteration: (t as any).iteration ?? '',
-            assigned_user_name: (t as any).assigned_user_name ?? null,
-            assigned_to: (t as any).assigned_to ?? null,
-            description: (t as any).description ?? '',
-          },
-          p
-        )
-      ).length
-      return { ...v, count: c }
+  // simple filtering
+  const filteredTasks = useMemo(() => {
+    return tasks.filter((t) => {
+      // project
+      if (filters.project && (t.project_id !== filters.project && (t as any).project_name !== filters.project)) {
+        const p = projects.find((pr) => pr.id === filters.project)
+        if (p && t.project_name !== p.name && t.module !== p.name) return false
+        if (!p) return false
+      }
+      // assignee
+      if (filters.assignee) {
+        if (filters.assignee === 'unassigned') {
+          if (t.assigned_to || (t as any).assigned_user_name) return false
+        } else if (t.assigned_to !== filters.assignee) return false
+      }
+      // status
+      if (filters.status && t.status !== filters.status) return false
+      // date (created_at) — single date
+      if (filters.date) {
+        const d = new Date(t.created_at)
+        if (isNaN(d.getTime())) return false
+        const ds = d.toISOString().slice(0, 10)
+        if (ds !== filters.date) return false
+      }
+      // title free text
+      if (filters.title) {
+        const hay = `${t.title || ''} ${(t as any).description || ''}`.toLowerCase()
+        const need = filters.title.toLowerCase().trim()
+        if (!hay.includes(need)) return false
+      }
+      return true
     })
-  }, [views, tasks])
+  }, [tasks, filters, projects])
+
+  const filteredCount = filteredTasks.length
+  const totalPages = Math.max(1, Math.ceil(filteredCount / pageSize))
+  const paginatedTasks = useMemo(() => filteredTasks.slice((page - 1) * pageSize, page * pageSize), [filteredTasks, page, pageSize])
+
+  // clamp page when filteredCount shrinks
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages)
+  }, [totalPages, page])
 
   async function handleCreateInGroup(status: string, title?: string) {
     const finalTitle = typeof title === 'string' ? title : `New task in ${status}`
     if (onTaskCreate) await onTaskCreate({ title: finalTitle, status, project_id: activeProjectId ?? undefined })
   }
 
+  // For GroupedTable, we pass filteredTasks and keep viewConfig for grouping/columns.
+  const tableConfig: ViewConfig = useMemo(() => ({ ...effectiveConfig, search: '' }), [effectiveConfig])
+
   return (
-    <div className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-card shadow-sm dark:bg-slate-900 dark:border-slate-800">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden rounded-2xl border border-slate-200 bg-card shadow-sm dark:bg-slate-900 dark:border-slate-800">
       {/* Top bar — project name with lock, insights, workflows, split toggle */}
       <div className="flex flex-col gap-2 border-b border-slate-200 bg-card px-3 py-2 dark:bg-slate-900 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
@@ -187,47 +139,18 @@ export function TaskListView({
           </h2>
           <span className="hidden text-xs text-slate-400 sm:inline">· {tasks.length} issues</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <button className="hidden items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700 sm:inline-flex">
-            <Plus className="h-3.5 w-3.5" /> Add status update
-          </button>
-          <button className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700">
-            <BarChart3 className="h-3.5 w-3.5" /> Insights
-          </button>
-          <button className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700">
-            <Workflow className="h-3.5 w-3.5" /> Workflows
-            <span className="rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-bold text-white dark:bg-white dark:text-slate-900">{workflowsCount}</span>
-          </button>
-          <div className="ml-1 h-6 w-px bg-slate-200 dark:bg-slate-700" />
-          <button
-            onClick={() => setSplitOpen((v) => !v)}
-            className={`inline-flex h-7 w-7 items-center justify-center rounded-lg border ${splitOpen ? 'bg-primary text-white border-primary shadow-sm dark:bg-white dark:text-slate-900 dark:border-white' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300'}`}
-            title="Toggle split view"
-            aria-pressed={splitOpen}
-          >
-            <PanelRight className="h-4 w-4" />
-          </button>
-        </div>
       </div>
 
-      {/* Saved View Tabs */}
-      <SavedViewTabs
-        views={viewsWithCount}
-        activeId={activeId}
-        onSelect={handleSelectView}
-        onCreate={handleCreateView}
-        onRename={handleRename}
-        onDelete={handleDelete}
-        onDuplicate={handleDuplicate}
-      />
+      {/* Simple Filters */}
+      <SimpleFilterBar filters={filters} onChange={setFilters} resultCount={filteredCount} users={users} projects={projects} />
 
-      {/* Filter / Query Bar */}
-      <FilterBar config={effectiveConfig} onChange={updateConfig} resultCount={filteredCount} users={users} projects={projects} />
+      {/* Status Chart */}
+      <StatusChart tasks={filteredTasks} />
 
-      {/* Grouped Table */}
+      {/* Grouped Table - paginated for performance (1000+ tasks) */}
       <GroupedTable
-        tasks={tasks}
-        viewConfig={effectiveConfig}
+        tasks={paginatedTasks}
+        viewConfig={tableConfig}
         onTaskClick={onTaskClick}
         onPatch={onTaskPatch}
         onCreateInGroup={handleCreateInGroup as any}
@@ -236,13 +159,14 @@ export function TaskListView({
         activeProjectName={activeProjectName}
       />
 
-      {/* Footer */}
-      <div className="flex items-center justify-between border-t border-slate-200 bg-[#f8f9fb] px-3 py-2 text-xs text-slate-500 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400">
-        <span className="tabular-nums">
-          Showing <span className="font-semibold text-slate-700 dark:text-slate-200">{filteredCount}</span> of {tasks.length}
-        </span>
-        <span className="hidden sm:inline">Sticky columns · inline edit via dropdown · grouping: {effectiveConfig.groupBy}</span>
-      </div>
+      {/* Pagination — optimized for 1000+ */}
+      <Pagination
+        total={filteredCount}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(s) => { setPageSize(s); setPage(1) }}
+      />
     </div>
   )
 }

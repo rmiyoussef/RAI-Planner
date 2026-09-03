@@ -1,4 +1,5 @@
-const API_BASE = (import.meta as any).env?.VITE_API_URL || '/api'
+const API_BASE = import.meta.env.VITE_API_URL as string
+if (!API_BASE) throw new Error("VITE_API_URL is not set in .env — no hard-coded fallback")
 
 function getToken() {
   return localStorage.getItem('rai_token')

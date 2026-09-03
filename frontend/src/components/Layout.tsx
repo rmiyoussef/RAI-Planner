@@ -96,9 +96,11 @@ export function Layout() {
         transition-transform duration-300 ease-out
         ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
-        {/* Brand — company name & logo */}
+        {/* Brand — company name & logo (from .env) */}
         {(() => {
-          const companyName = company?.company_name || 'RAI Planner'
+          const envName = import.meta.env.VITE_APP_NAME as string
+          if (!envName) throw new Error("VITE_APP_NAME not set in .env")
+          const companyName = company?.company_name || envName
           const logo = company?.company_logo || null
           const FallbackIcon = pickRandomIcon(companyName)
           return (
@@ -183,9 +185,11 @@ export function Layout() {
 
       {/* Main */}
       <div className="flex-1 min-w-0 flex flex-col">
-        {/* Mobile top bar */}
+        {/* Mobile top bar — from .env */}
         {(() => {
-          const companyName = company?.company_name || 'RAI Planner'
+          const envName = import.meta.env.VITE_APP_NAME as string
+          if (!envName) throw new Error("VITE_APP_NAME not set")
+          const companyName = company?.company_name || envName
           const logo = company?.company_logo || null
           const FallbackIcon = pickRandomIcon(companyName)
           return (
@@ -217,7 +221,7 @@ export function Layout() {
         </main>
 
         <footer className="border-t border-border bg-card/50 px-6 py-3 text-center text-xs text-muted-foreground dark:bg-slate-900/50">
-          © 2026 Squadify Lab · RAI Planner · Rami Youssef · v{(pkg as any).version}
+          © 2026 Squadify Lab · {import.meta.env.VITE_APP_NAME} · Rami Youssef · v{(pkg as any).version}
         </footer>
       </div>
     </div>

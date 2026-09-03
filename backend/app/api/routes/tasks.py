@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request
 from typing import Optional, List
 from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskListResponse, TaskVersionResponse, TaskActivityResponse
 from app.core.database import get_collection, new_id, utc_now
 from app.api.deps import get_current_owner
 from app.agents.smart_engineering_agent import agent
+from app.core.ratelimit import rate_limit
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -74,7 +75,8 @@ async def list_tasks(
     return TaskListResponse(items=enriched, total=total)
 
 @router.post("", response_model=TaskResponse)
-async def create_task(payload: TaskCreate, owner=Depends(get_current_owner)):
+async def create_task(payload: TaskCreate, request: Request, owner=Depends(get_current_owner)):
+    rate_limit(request, "create_task", limit=60, window_seconds=60)
     # validate project exists and belongs to owner
     proj = await get_collection("projects").find_one({"_id": payload.project_id, "owner_id": owner["_id"]})
     if not proj:

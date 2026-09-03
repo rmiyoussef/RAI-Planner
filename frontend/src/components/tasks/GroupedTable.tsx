@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, MoreHorizontal, Plus, GripVertical, ArrowUpDown, Hash, Calendar, Tag, Users, FolderKanban, Layers } from 'lucide-react'
 import type { TaskItem, ViewConfig } from './types'
 import { getStatusMeta, sortStatusKeys } from './statusMeta'
@@ -114,6 +114,8 @@ export function GroupedTable({
   onCreateInGroup,
   users,
   projects,
+  page = 1,
+  pageSize = 50,
 }: {
   tasks: TaskItem[]
   viewConfig: ViewConfig
@@ -123,8 +125,13 @@ export function GroupedTable({
   users?: { id: string; full_name: string; github_username?: string }[]
   projects?: { id: string; name: string }[]
   activeProjectName?: string
+  page?: number
+  pageSize?: number
 }) {
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    // planning expanded, others collapsed per request
+    return { in_progress: true, in_review: true, done: true, archived: true, planning: false, todo: false, testing: true, on_hold: true, completed: true }
+  })
   const [addDraft, setAddDraft] = useState<Record<string, string>>({})
 
   const parsed = useMemo(() => parseQuery(viewConfig.search), [viewConfig.search])
@@ -200,6 +207,23 @@ export function GroupedTable({
 
   const statusKeys = viewConfig.groupBy === 'status' ? sortStatusKeys(Object.keys(grouped)) : Object.keys(grouped)
 
+  // ensure planning expanded, others collapsed (per request: always make group planning expanded and the other groups collapsed)
+  useEffect(() => {
+    if (viewConfig.groupBy !== 'status') return
+    setCollapsed((prev) => {
+      const next: Record<string, boolean> = { ...prev }
+      for (const k of statusKeys) {
+        const isPlanning = k === 'todo' || k === 'planning'
+        if (!(k in next)) next[k] = !isPlanning
+      }
+      // force planning to stay expanded
+      for (const k of statusKeys) {
+        if (k === 'todo' || k === 'planning') next[k] = false
+      }
+      return next
+    })
+  }, [statusKeys.join(','), viewConfig.groupBy]) // eslint-disable-line react-hooks/exhaustive-deps
+
   if (filtered.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 border-t border-slate-200 bg-white px-6 py-12 text-center dark:bg-slate-900 dark:border-slate-800">
@@ -211,7 +235,7 @@ export function GroupedTable({
   }
 
   return (
-    <div className="overflow-x-auto bg-white dark:bg-slate-900 scrollbar-thin">
+    <div className="flex-1 min-h-0 overflow-auto bg-white dark:bg-slate-900 scrollbar-thin">
       <div style={{ minWidth: totalWidth }} className="min-w-full">
         {/* Table header - sticky */}
         <div className="sticky top-0 z-10 flex border-b border-slate-200 bg-[#f8f9fb] text-xs font-semibold text-slate-500 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400">
@@ -245,7 +269,7 @@ export function GroupedTable({
             return (
               <div key="none">
                 {items.map((t, idx) => (
-                  <Row key={t.id} task={t} index={idx + 1} colDefs={colDefs} densityPad={densityPad} onTaskClick={onTaskClick} onPatch={onPatch} users={users} projects={projects} />
+                  <Row key={t.id} task={t} index={(page - 1) * pageSize + idx + 1} colDefs={colDefs} densityPad={densityPad} onTaskClick={onTaskClick} onPatch={onPatch} users={users} projects={projects} />
                 ))}
               </div>
             )
@@ -286,7 +310,7 @@ export function GroupedTable({
               {!isCollapsed && (
                 <div>
                   {items.map((t, idx) => (
-                    <Row key={t.id} task={t} index={idx + 1} colDefs={colDefs} densityPad={densityPad} onTaskClick={onTaskClick} onPatch={onPatch} users={users} projects={projects} />
+                    <Row key={t.id} task={t} index={(page - 1) * pageSize + idx + 1} colDefs={colDefs} densityPad={densityPad} onTaskClick={onTaskClick} onPatch={onPatch} users={users} projects={projects} />
                   ))}
                   <div className="flex items-center gap-2 border-t border-dashed border-slate-200 bg-white px-3 py-2 dark:bg-slate-900 dark:border-slate-700">
                     <Plus className="h-3.5 w-3.5 text-slate-400" />

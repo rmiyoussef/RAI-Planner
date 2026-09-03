@@ -8,6 +8,28 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
+# Allowed collections — prevents SQL injection via table name and limits surface
+ALLOWED_COLLECTIONS = {
+    "owners",
+    "company_settings",
+    "projects",
+    "tasks",
+    "task_versions",
+    "task_activities",
+    "users",
+    "ai_configs",
+    "agent_skills",
+    "agent_settings",
+    "skills",
+}
+
+def _validate_collection_name(name: str):
+    if name not in ALLOWED_COLLECTIONS:
+        # For backwards compat, allow any alphanumeric + underscore, but block injection
+        if not name.replace("_", "").isalnum() or len(name) > 64:
+            raise ValueError(f"Invalid collection name: {name}")
+        logger.warning(f"Using non-whitelisted collection: {name}")
+
 # Global in-memory fallback with file persistence so restarts don't log everyone out
 _PERSIST_PATH = pathlib.Path(__file__).resolve().parent.parent.parent / ".memory_db.json"
 _memory_db: Dict[str, Dict[str, Dict[str, Any]]] = {}
@@ -38,6 +60,7 @@ def _save_persist():
 
 class InMemoryCollection:
     def __init__(self, name: str):
+        _validate_collection_name(name)
         self.name = name
         if name not in _memory_db:
             _memory_db[name] = {}
@@ -170,6 +193,7 @@ _pg_lock = asyncio.Lock()
 _use_postgres = False
 
 async def _ensure_pg_table(pool, name: str):
+    _validate_collection_name(name)
     # simple table with id TEXT PK and data JSONB
     # use quoted identifier to be safe
     safe = '"' + name.replace('"', '""') + '"'
@@ -178,6 +202,7 @@ async def _ensure_pg_table(pool, name: str):
 
 class PostgresCollection:
     def __init__(self, name: str, pool):
+        _validate_collection_name(name)
         self.name = name
         self.pool = pool
         self._safe = '"' + name.replace('"', '""') + '"'
@@ -345,6 +370,7 @@ async def init_db():
     _load_persist()
 
 def get_collection(name: str):
+    _validate_collection_name(name)
     if _use_postgres and _pg_pool is not None:
         return PostgresCollection(name, _pg_pool)
     # fallback to in-memory (handles both file and mock)

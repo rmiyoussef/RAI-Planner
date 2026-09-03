@@ -161,7 +161,7 @@ export function Home() {
 
   if (loading) {
     return (
-      <div className="w-full space-y-6 p-4 sm:p-6 lg:p-8">
+      <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-3">
             <div className="h-8 w-56 animate-pulse rounded-lg bg-muted" />
@@ -209,7 +209,7 @@ export function Home() {
   const tasksByPriority = (data.tasks_by_priority ?? {}) as Record<string, number>
 
   return (
-    <div className="w-full space-y-6 p-4 sm:p-6 lg:p-8 animate-in motion-reduce:animate-none">
+    <div className="flex flex-col gap-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1.5">

@@ -9,8 +9,8 @@ set -e
 #
 # What it does:
 #   1. Finds repo root (where VERSION lives)
-#   2. Fetches remote, compares local VERSION vs remote VERSION
-#   3. If outdated, pulls latest (staging or main), patches .env with new keys, reinstalls deps, rebuilds, migrates DB
+#   2. Fetches remote, compares local VERSION vs remote VERSION (from main)
+#   3. If outdated, pulls latest from main, patches .env with new keys, reinstalls deps, rebuilds, migrates DB
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Resolve root
@@ -33,8 +33,9 @@ echo "  RAI Planner — Updater"
 echo "  Root: $ROOT"
 echo "=========================================="
 
-# Determine current branch and remote
-BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "staging")
+# Determine current branch and remote (source of truth is main)
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+TARGET_BRANCH="main"
 REMOTE=$(git remote 2>/dev/null | head -n1)
 if [ -z "$REMOTE" ]; then
   REMOTE="origin"
@@ -49,16 +50,8 @@ echo "→ Local version:  v$LOCAL_VER  (branch: $BRANCH)"
 echo "→ Fetching remote ($REMOTE)..."
 git fetch "$REMOTE" --tags --prune 2>&1 | head -n 20 || echo "  (fetch warning, continuing)"
 
-# Get remote VERSION without checking out (via git show)
-REMOTE_VER=""
-for try_branch in staging main master; do
-  # try to get VERSION from remote branch
-  REMOTE_VER=$(git show "$REMOTE/$try_branch:VERSION" 2>/dev/null | tr -d '[:space:]' || echo "")
-  if [ -n "$REMOTE_VER" ]; then
-    TARGET_BRANCH="$try_branch"
-    break
-  fi
-done
+# Get remote VERSION from main without checking out (via git show)
+REMOTE_VER=$(git show "$REMOTE/$TARGET_BRANCH:VERSION" 2>/dev/null | tr -d '[:space:]' || echo "")
 
 # Also check latest tag as fallback
 LATEST_TAG=$(git ls-remote --tags "$REMOTE" 2>/dev/null | grep -E "refs/tags/v[0-9]" | sed 's|.*refs/tags/||' | sort -V | tail -n1 | sed 's|^{}||' || echo "")

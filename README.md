@@ -105,7 +105,7 @@ sudo bash deploy/setup-nginx.sh  # vhost plan.squadifyai.com.conf → /etc/nginx
 ## Updating
 
 ```bash
-./update.sh        # version-aware: fetches origin/staging|main, compares VERSION, stashes, pulls, patches .env, reinstalls, rebuilds, ensures pgdata
+./update.sh        # version-aware: fetches origin/main, compares VERSION, stashes, pulls, patches .env, reinstalls, rebuilds, ensures pgdata
 # or one-liner
 curl -fsSL https://raw.githubusercontent.com/rmiyoussef/RAI-Planner/main/update.sh | bash
 ```

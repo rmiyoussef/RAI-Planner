@@ -33,6 +33,8 @@ import {
   ChevronDown,
   Check,
   Trash2,
+  Zap,
+  Wand2,
 } from 'lucide-react'
 
 const GENERATING_STAGES = [
@@ -921,6 +923,120 @@ export function Tasks() {
 
             {/* Scrollable content */}
             <div className="flex-1 overflow-y-auto bg-background px-5 py-6 sm:px-6 space-y-6">
+              {/* AI Hero — Generate with AI at top */}
+              <section aria-label="AI task generation" className="relative overflow-hidden rounded-2xl border border-violet-200/70 bg-gradient-to-br from-violet-600 via-indigo-600 to-fuchsia-600 p-5 text-white shadow-xl shadow-violet-600/20 dark:border-violet-800/60 dark:shadow-violet-950/40 sm:p-6">
+                {/* decorative orbs + grid */}
+                <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+                  <div className="absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/15 blur-3xl" />
+                  <div className="absolute -bottom-24 -left-10 h-52 w-52 rounded-full bg-fuchsia-300/20 blur-3xl" />
+                  <div className="absolute inset-0 opacity-[0.18]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '18px 18px' }} />
+                </div>
+
+                <div className="relative">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/25 backdrop-blur-md">
+                        {generating ? (
+                          <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+                        ) : (
+                          <Sparkles className="h-5 w-5" aria-hidden="true" />
+                        )}
+                        <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-white text-violet-700 shadow">
+                          <Bot className="h-2.5 w-2.5" aria-hidden="true" />
+                        </span>
+                      </div>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-[15px] font-bold tracking-tight">AI Task Engineer</h3>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 ring-white/25 backdrop-blur">
+                            <Zap className="h-2.5 w-2.5" aria-hidden="true" /> 1-click boost
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-xs leading-relaxed text-white/80">
+                          Rough task → shippable spec. Reads project + <span className="font-mono font-semibold text-white">.brain</span>, rewrites acceptance criteria.
+                        </p>
+                      </div>
+                    </div>
+                    {selected.ai_generated ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-400/20 px-2.5 py-1 text-[11px] font-bold text-white ring-1 ring-white/30 backdrop-blur">
+                        <Check className="h-3 w-3" aria-hidden="true" /> AI Enhanced • v{selected.version}
+                      </span>
+                    ) : (
+                      <span className="hidden items-center gap-1.5 rounded-full bg-black/20 px-2.5 py-1 text-[11px] font-medium text-white/90 ring-1 ring-white/20 sm:inline-flex">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-300" aria-hidden="true" /> Ready • once per task
+                      </span>
+                    )}
+                  </div>
+
+                  {/* capability pills */}
+                  <div className="mt-4 flex flex-wrap gap-1.5">
+                    {[
+                      { icon: FolderKanban, label: 'Reads project' },
+                      { icon: FileText, label: '.brain context' },
+                      { icon: ListChecks, label: 'Acceptance criteria' },
+                    ].map((f) => (
+                      <span key={f.label} className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/90 ring-1 ring-white/20 backdrop-blur">
+                        <f.icon className="h-3 w-3" aria-hidden="true" /> {f.label}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* generating progress */}
+                  {generating ? (
+                    <div role="status" aria-live="polite" className="mt-4 rounded-2xl bg-black/25 p-4 ring-1 ring-white/20 backdrop-blur-md">
+                      <div className="flex items-center gap-2 text-sm font-bold">
+                        <Wand2 className="h-4 w-4 animate-pulse" aria-hidden="true" /> Engineering your task…
+                      </div>
+                      <ol className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                        {GENERATING_STAGES.map((stage, idx) => (
+                          <li
+                            key={stage}
+                            className="flex items-center gap-2 rounded-xl bg-white/10 px-2.5 py-1.5 text-xs font-medium text-white/90 ring-1 ring-white/15 motion-reduce:animate-none"
+                            style={{ animationDelay: `${idx * 120}ms` }}
+                          >
+                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[10px] font-bold text-violet-700">
+                              {idx + 1}
+                            </span>
+                            <span className="truncate">{stage}</span>
+                            <span className="ml-auto h-1.5 w-1.5 shrink-0 animate-ping rounded-full bg-white/80" aria-hidden="true" />
+                          </li>
+                        ))}
+                      </ol>
+                      <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/20">
+                        <div className="shimmer h-full w-2/3 rounded-full bg-gradient-to-r from-white via-violet-200 to-white" />
+                      </div>
+                      <p className="mt-2 text-[11px] font-medium text-white/70">Please keep this open — saving a new version on finish.</p>
+                    </div>
+                  ) : (
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <button
+                        type="button"
+                        disabled={!!selected.ai_generated}
+                        onClick={generate}
+                        className="group inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-bold text-violet-700 shadow-lg shadow-black/10 transition-all hover:scale-[1.01] hover:bg-violet-50 hover:shadow-xl active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:scale-100"
+                      >
+                        <Sparkles className="h-4 w-4 transition-transform group-hover:rotate-12" aria-hidden="true" />
+                        {selected.ai_generated ? 'Already enhanced with AI' : 'Generate Task with AI'}
+                        {!selected.ai_generated && (
+                          <span className="rounded-md bg-violet-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-violet-700">✦ AI</span>
+                        )}
+                      </button>
+                      {!selected.ai_generated && (
+                        <p className="text-center text-[11px] font-medium leading-relaxed text-white/70 sm:max-w-[180px] sm:text-left">
+                          One-time rewrite. You can still edit everything after.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {selected.ai_generated && !generating && (
+                    <p className="mt-3 flex items-center gap-1.5 rounded-xl bg-white/10 px-3 py-2 text-xs font-medium text-white/90 ring-1 ring-white/20">
+                      <Bot className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> AI has already polished this task. Check Timeline below for the AI version.
+                    </p>
+                  )}
+                </div>
+              </section>
+
               {/* Metadata — auto-save fields */}
               <section className="card space-y-4">
                 <div className="flex items-center justify-between">
@@ -1156,53 +1272,6 @@ export function Tasks() {
                 </div>
               </section>
 
-              {/* AI Generation */}
-              <section className="card space-y-4 border-violet-200/50 dark:border-violet-900/50">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-600 text-white shadow-sm">
-                    <Sparkles className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold tracking-tight text-foreground">Smart Engineering Agent</h3>
-                    <p className="text-xs font-medium text-muted-foreground">Let AI rewrite the task from project context.</p>
-                  </div>
-                </div>
-                {generating && (
-                  <div className="rounded-2xl border border-violet-200 bg-violet-50/60 p-4 dark:border-violet-900 dark:bg-violet-950/30">
-                    <div className="flex items-center gap-2.5 text-sm font-semibold text-violet-700 dark:text-violet-300">
-                      <Loader2 className="h-4 w-4 animate-spin" /> Generating — please wait
-                    </div>
-                    <ol className="mt-3 space-y-1.5">
-                      {GENERATING_STAGES.map((stage, idx) => (
-                        <li key={stage} className="flex items-center gap-2 text-xs font-medium text-violet-700/80 dark:text-violet-300/80">
-                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[10px] font-bold text-violet-600 shadow-sm border border-violet-200 dark:bg-violet-900 dark:text-violet-200">{idx + 1}</span>
-                          {stage}
-                        </li>
-                      ))}
-                    </ol>
-                    <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-violet-200 dark:bg-violet-900">
-                      <div className="h-full w-1/2 animate-pulse rounded-full bg-violet-600" />
-                    </div>
-                  </div>
-                )}
-                <button
-                  type="button"
-                  disabled={!!selected.ai_generated || generating}
-                  onClick={generate}
-                  className="btn btn-primary w-full justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                  Generate task With AI
-                </button>
-                {selected.ai_generated ? (
-                  <p className="flex items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-medium text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300">
-                    <Bot className="h-3.5 w-3.5" /> AI generation has already been performed for this task.
-                  </p>
-                ) : (
-                  <p className="text-xs leading-relaxed font-medium text-muted-foreground">AI will inspect project and .brain to rewrite task. This can only be done once per task.</p>
-                )}
-              </section>
-
               {/* Activity */}
               <section className="card space-y-4">
                 <h3 className="inline-flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground">
@@ -1242,37 +1311,6 @@ export function Tasks() {
                 )}
               </section>
 
-              {/* Delete Task — smart business danger zone */}
-              <section className="relative overflow-hidden rounded-2xl border border-red-200 bg-gradient-to-r from-red-50/90 to-white shadow-sm dark:from-red-950/20 dark:to-slate-900 dark:border-red-900/30">
-                <div className="absolute left-0 top-0 h-full w-1 bg-red-500" aria-hidden="true" />
-                <div className="p-4 sm:p-5 space-y-4">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm shrink-0">
-                      <Trash2 className="h-4 w-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white">Danger Zone</h3>
-                      <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400 mt-1">
-                        Permanently delete <span className="font-semibold text-slate-900 dark:text-white">“{selected?.title}”</span> and all versions/activity. This is <span className="font-bold text-red-600 dark:text-red-400">irreversible</span>.
-                      </p>
-                    </div>
-                    <span className="hidden sm:inline-flex items-center rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-bold text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800">Irreversible</span>
-                  </div>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-red-100 dark:border-red-900/20">
-                    <p className="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
-                      <AlertCircle className="h-3.5 w-3.5" /> Business data will be permanently lost
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setShowDeleteConfirm(true)}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-red-600 shadow-sm ring-1 ring-red-200 hover:bg-red-50 hover:text-red-700 hover:ring-red-300 dark:bg-slate-800 dark:text-red-400 dark:ring-red-900 dark:hover:bg-red-950/40 transition-colors"
-                    >
-                      <Trash2 className="h-4 w-4" /> Delete Task
-                    </button>
-                  </div>
-                </div>
-              </section>
-
               {/* Versions */}
               <section className="card space-y-4">
                 <h3 className="inline-flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground">
@@ -1307,6 +1345,37 @@ export function Tasks() {
                 ) : (
                   <p className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-8 text-center text-sm font-medium text-muted-foreground">No versions</p>
                 )}
+              </section>
+
+              {/* Delete Task — smart business danger zone (end of screen) */}
+              <section className="relative overflow-hidden rounded-2xl border border-red-200 bg-gradient-to-r from-red-50/90 to-white shadow-sm dark:from-red-950/20 dark:to-slate-900 dark:border-red-900/30">
+                <div className="absolute left-0 top-0 h-full w-1 bg-red-500" aria-hidden="true" />
+                <div className="p-4 sm:p-5 space-y-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm shrink-0">
+                      <Trash2 className="h-4 w-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white">Danger Zone</h3>
+                      <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400 mt-1">
+                        Permanently delete <span className="font-semibold text-slate-900 dark:text-white">“{selected?.title}”</span> and all versions/activity. This is <span className="font-bold text-red-600 dark:text-red-400">irreversible</span>.
+                      </p>
+                    </div>
+                    <span className="hidden sm:inline-flex items-center rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-bold text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800">Irreversible</span>
+                  </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-red-100 dark:border-red-900/20">
+                    <p className="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                      <AlertCircle className="h-3.5 w-3.5" /> Business data will be permanently lost
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-red-600 shadow-sm ring-1 ring-red-200 hover:bg-red-50 hover:text-red-700 hover:ring-red-300 dark:bg-slate-800 dark:text-red-400 dark:ring-red-900 dark:hover:bg-red-950/40 transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" /> Delete Task
+                    </button>
+                  </div>
+                </div>
               </section>
             </div>
           </div>

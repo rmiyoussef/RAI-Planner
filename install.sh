@@ -21,16 +21,17 @@ REPO_URL="https://github.com/rmiyoussef/RAI-Planner.git"
 REPO_SSH="git@github.com:rmiyoussef/RAI-Planner.git"
 DEFAULT_BRANCH="main"
 
-# If we are not inside the repo (no VERSION file next to this script), clone it
+# If we are not inside the repo (no VERSION file next to this script), clone it (from main)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ ! -f "$SCRIPT_DIR/VERSION" ] && [ ! -f "./VERSION" ]; then
-  echo "→ Cloning RAI Planner..."
+  echo "→ Cloning RAI Planner (branch: $DEFAULT_BRANCH)..."
   if ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
-    git clone "$REPO_SSH" RAI-Planner || { echo "Clone via SSH failed, trying HTTPS..."; git clone "$REPO_URL" RAI-Planner; }
+    git clone -b "$DEFAULT_BRANCH" "$REPO_SSH" RAI-Planner || git clone "$REPO_SSH" RAI-Planner || { echo "Clone via SSH failed, trying HTTPS..."; git clone -b "$DEFAULT_BRANCH" "$REPO_URL" RAI-Planner; }
   else
-    git clone "$REPO_URL" RAI-Planner || { echo "Clone via HTTPS failed, trying SSH..."; git clone "$REPO_SSH" RAI-Planner; }
+    git clone -b "$DEFAULT_BRANCH" "$REPO_URL" RAI-Planner || git clone "$REPO_URL" RAI-Planner || { echo "Clone via HTTPS failed, trying SSH..."; git clone -b "$DEFAULT_BRANCH" "$REPO_SSH" RAI-Planner; }
   fi
   cd RAI-Planner
+  git checkout "$DEFAULT_BRANCH" 2>/dev/null || true
 else
   if [ -f "$SCRIPT_DIR/VERSION" ]; then
     cd "$SCRIPT_DIR"

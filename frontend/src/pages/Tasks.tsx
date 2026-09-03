@@ -136,12 +136,12 @@ export function Tasks() {
 
   // lock body scroll when drawer open
   useEffect(() => {
-    if (selected) document.body.style.overflow = 'hidden'
+    if (selected || showCreate) document.body.style.overflow = 'hidden'
     else document.body.style.overflow = ''
     return () => {
       document.body.style.overflow = ''
     }
-  }, [selected])
+  }, [selected, showCreate])
 
   // Sync drafts when selected changes
   useEffect(() => {
@@ -538,12 +538,31 @@ export function Tasks() {
         </div>
       </div>
 
-      {/* Create form */}
+      {/* Create drawer — same style as edit/view (right side modal) */}
       {showCreate && (
-        <div
-          id="create-task-card"
-          className="card space-y-5 border-primary/10 shadow-glass animate-in motion-reduce:animate-none shrink-0 max-h-[40vh] overflow-auto"
-        >
+        <div className="fixed inset-0 z-[60] flex justify-end" role="dialog" aria-modal="true" aria-labelledby="create-drawer-title">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowCreate(false)} aria-hidden="true" />
+          <div className="relative flex h-dvh w-full flex-col bg-card shadow-xl border-l border-border dark:bg-slate-900 lg:w-[50vw] lg:max-w-[600px] animate-in motion-reduce:animate-none">
+            <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-card px-5 py-4 dark:bg-slate-900">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-white shadow-sm">
+                  <Plus className="h-5 w-5" aria-hidden="true" />
+                </div>
+                <div>
+                  <h3 id="create-drawer-title" className="text-[15px] font-semibold tracking-tight">Create Task</h3>
+                  <p className="text-xs font-medium text-muted-foreground">Add a new task to your project backlog.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreate(false)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card hover:bg-muted text-muted-foreground"
+                aria-label="Close create"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto bg-background p-5 sm:p-6 space-y-5">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-primary/10 bg-primary-light text-primary dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
@@ -694,7 +713,7 @@ export function Tasks() {
             </div>
           </div>
 
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end pt-4 border-t border-border">
             <button type="button" onClick={() => setShowCreate(false)} className="btn btn-ghost cursor-pointer">
               Cancel
             </button>
@@ -702,6 +721,8 @@ export function Tasks() {
               <Plus className="h-4 w-4" aria-hidden="true" />
               Create
             </button>
+          </div>
+            </div>
           </div>
         </div>
       )}

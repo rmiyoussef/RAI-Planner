@@ -16,9 +16,13 @@ export function Login() {
   const [signupAllowed, setSignupAllowed] = useState<boolean | null>(null)
   const [retryAfter, setRetryAfter] = useState<number | null>(null)
   const retryTimerRef = useRef<number | null>(null)
+  const [company, setCompany] = useState<{ company_name: string; company_logo: string | null } | null>(null)
 
   useEffect(() => {
     api.get('/auth/signup-status').then((d:any)=> setSignupAllowed(!!d.allowed)).catch(()=> setSignupAllowed(false))
+    api.get('/settings/company/public').then((d:any)=> {
+      if (d?.initialized && d?.company_name) setCompany({ company_name: d.company_name, company_logo: d.company_logo || null })
+    }).catch(()=>{})
   }, [])
 
   // countdown for rate limit
@@ -75,13 +79,27 @@ export function Login() {
       <div className="w-full max-w-[440px]">
         <form onSubmit={submit} className="card p-6 sm:p-8 space-y-6 shadow-medium" noValidate>
           <div className="space-y-3 text-center">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-secondary text-white shadow-sm">
-              <Sparkles className="w-6 h-6" />
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-secondary text-white shadow-sm overflow-hidden">
+              {company?.company_logo ? (
+                <img src={company.company_logo} alt={`${company.company_name} logo`} className="h-full w-full object-cover" />
+              ) : (
+                <Sparkles className="w-6 h-6" />
+              )}
             </div>
             <div className="space-y-1">
-              <h1 className="text-[26px] font-bold tracking-tight">Welcome back</h1>
-              <p className="text-sm text-muted-foreground">Sign in to your business workspace</p>
+              <h1 className="text-[26px] font-bold tracking-tight">
+                {company ? `Welcome back to ${company.company_name}` : 'Welcome back'}
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                {company ? `Continue work at ${company.company_name} — sign in to your workspace` : 'Sign in to your business workspace'}
+              </p>
             </div>
+            {company && (
+              <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-border bg-muted/30 px-3 py-1 text-xs font-medium text-muted-foreground">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                {company.company_name} • Workspace ready
+              </div>
+            )}
           </div>
 
           {error && (

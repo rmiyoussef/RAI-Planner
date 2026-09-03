@@ -154,7 +154,7 @@ export function Projects() {
               id="project-status-filter"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
-              className="h-[42px] cursor-pointer appearance-none rounded-xl border border-border bg-card py-2 pl-3.5 pr-9 text-sm font-medium text-foreground shadow-sm transition-colors hover:border-primary/30 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="h-[42px] cursor-pointer appearance-none rounded-xl border border-border bg-card py-2 pl-3.5 pr-9 text-sm font-medium text-foreground shadow-sm transition-colors hover:border-border focus:border-border focus:outline-none focus:ring-0 focus-visible:border-border focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
             >
               <option value="">All statuses</option>
               <option value="active">Active</option>

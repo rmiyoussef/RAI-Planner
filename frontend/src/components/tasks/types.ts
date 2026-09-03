@@ -5,6 +5,7 @@ export type TaskItem = {
   title: string
   status: string
   priority?: string
+  task_type?: string
   // legacy single assignee + new multi
   assigned_to?: string | null
   assigned_user_name?: string | null
@@ -51,6 +52,7 @@ export type SavedView = {
 export const ALL_COLUMNS = [
   'rowNumber',
   'title',
+  'task_type',
   'module',
   'assignees',
   'labels',
@@ -64,6 +66,7 @@ export type ColumnKey = (typeof ALL_COLUMNS)[number]
 export const DEFAULT_VISIBLE_COLUMNS: ColumnKey[] = [
   'rowNumber',
   'title',
+  'task_type',
   'module',
   'assignees',
   'labels',

@@ -127,17 +127,26 @@ export function TaskListView({
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden rounded-2xl border border-slate-200 bg-card shadow-sm dark:bg-slate-900 dark:border-slate-800">
-      {/* Top bar — project name with lock, insights, workflows, split toggle */}
-      <div className="flex flex-col gap-2 border-b border-slate-200 bg-card px-3 py-2 dark:bg-slate-900 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-white shadow-sm dark:bg-white dark:text-slate-900">
+      {/* Top bar — premium business header */}
+      <div className="flex flex-col gap-3 border-b border-slate-200 bg-gradient-to-r from-primary/[0.03] via-transparent to-transparent px-4 py-3 dark:from-white/[0.04] dark:bg-slate-900 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary text-white shadow-md ring-1 ring-primary/20 dark:bg-white dark:text-slate-900">
             <CheckSquare className="h-4 w-4" />
           </div>
-          <h2 className="flex items-center gap-1.5 text-sm font-bold tracking-tight">
-            {activeProjectName}
-            <Lock className="h-3.5 w-3.5 text-slate-400" />
-          </h2>
-          <span className="hidden text-xs text-slate-400 sm:inline">· {tasks.length} issues</span>
+          <div className="min-w-0">
+            <h2 className="flex items-center gap-2 text-[15px] font-bold tracking-tight leading-none">
+              {activeProjectName}
+              <Lock className="h-3.5 w-3.5 text-slate-400" />
+              <span className="hidden sm:inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900">Active</span>
+            </h2>
+            <p className="hidden sm:block text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              {tasks.length} issues • {filteredCount} filtered • Business workspace
+            </p>
+          </div>
+        </div>
+        <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+          Live • Synced
         </div>
       </div>
 

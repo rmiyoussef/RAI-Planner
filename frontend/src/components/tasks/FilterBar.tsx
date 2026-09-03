@@ -48,7 +48,7 @@ export function FilterBar({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder='Search — e.g. -status:"Completed" assignee:rami label:urgent  free text'
-            className="h-8 w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-8 pr-16 text-sm placeholder:text-slate-400 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:bg-slate-800 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-500 dark:focus:border-slate-600"
+            className="h-8 w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-8 pr-16 text-sm placeholder:text-slate-400 focus:border-slate-200 focus:outline-none focus:ring-0 focus-visible:border-slate-200 focus-visible:outline-none focus-visible:ring-0 dark:bg-slate-800 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-500 dark:focus:border-slate-700 dark:focus-visible:border-slate-700"
             aria-label="Filter tasks"
           />
           {/* token preview chips inside? show inline after? */}

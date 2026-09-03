@@ -236,7 +236,7 @@ export function Home() {
               id="granularity"
               value={gran}
               onChange={(e) => setGran(e.target.value as Granularity)}
-              className="h-10 cursor-pointer appearance-none rounded-xl border border-border bg-card py-2 pl-9 pr-9 text-sm font-medium text-foreground shadow-sm transition-colors hover:border-primary/30 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="h-10 cursor-pointer appearance-none rounded-xl border border-border bg-card py-2 pl-9 pr-9 text-sm font-medium text-foreground shadow-sm transition-colors hover:border-border focus:border-border focus:outline-none focus:ring-0 focus-visible:border-border focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
             >
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>

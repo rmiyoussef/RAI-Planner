@@ -487,7 +487,7 @@ export function Settings() {
                       onChange={(e) => setCompany({ ...company, company_name: e.target.value })}
                       placeholder="Acme Inc."
                       maxLength={150}
-                      className="input h-11 pr-10 text-[15px] font-medium bg-card border-border group-hover:border-primary/20 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
+                      className="input h-11 pr-10 text-[15px] font-medium bg-card border-border group-hover:border-border focus:border-border focus:ring-0 focus-visible:border-border focus-visible:ring-0 focus-visible:ring-offset-0 transition-all"
                     />
                     <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground tabular-nums">{company.company_name.length}/150</span>
                   </div>
@@ -599,7 +599,7 @@ export function Settings() {
                     value={ai.provider_url}
                     onChange={(e) => setAi({ ...ai, provider_url: e.target.value })}
                     placeholder="https://api.openai.com/v1"
-                    className="input h-11 font-mono text-[13px] bg-card border-border hover:border-primary/20 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
+                    className="input h-11 font-mono text-[13px] bg-card border-border hover:border-border focus:border-border focus:ring-0 focus-visible:border-border focus-visible:ring-0 focus-visible:ring-offset-0 transition-all"
                   />
                   <p className="text-xs text-muted-foreground">Must be a valid <span className="font-mono">https://</span> URL.</p>
                 </div>
@@ -631,7 +631,7 @@ export function Settings() {
                         value={ai.api_key}
                         onChange={(e) => setAi({ ...ai, api_key: e.target.value })}
                         placeholder={ai.masked || '••••••••••••'}
-                        className="input h-11 pr-10 font-mono text-[13px] bg-card border-border group-hover:border-primary/20 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
+                        className="input h-11 pr-10 font-mono text-[13px] bg-card border-border group-hover:border-border focus:border-border focus:ring-0 focus-visible:border-border focus-visible:ring-0 focus-visible:ring-offset-0 transition-all"
                       />
                       <button
                         type="button"

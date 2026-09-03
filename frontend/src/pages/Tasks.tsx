@@ -15,6 +15,7 @@ import {
   Loader2,
   X,
   AlertCircle,
+  AlertTriangle,
   CalendarDays,
   User,
   FolderKanban,
@@ -31,6 +32,7 @@ import {
   ListChecks,
   ChevronDown,
   Check,
+  Trash2,
 } from 'lucide-react'
 
 const GENERATING_STAGES = [
@@ -59,7 +61,9 @@ export function Tasks() {
     status: 'todo',
     assigned_to: '',
     tags: '',
+    task_type: 'task',
   })
+  const [tagInput, setTagInput] = useState('')
   const [selected, setSelected] = useState<any | null>(null)
   const [drawerTab, setDrawerTab] = useState<'edit' | 'preview'>('preview')
   const [versions, setVersions] = useState<any[]>([])
@@ -86,6 +90,10 @@ export function Tasks() {
   // Tags editing
   const [tagsDraft, setTagsDraft] = useState('')
   const [tagsEditing, setTagsEditing] = useState(false)
+
+  // Delete confirmation
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -193,9 +201,11 @@ export function Tasks() {
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean),
+        task_type: form.task_type,
       })
       setShowCreate(false)
-      setForm((f) => ({ ...f, title: '', description: '', tags: '' }))
+      setForm((f) => ({ ...f, title: '', description: '', tags: '', task_type: 'task' }))
+      setTagInput('')
       load()
     } catch (e: any) {
       setError(e.message)
@@ -332,6 +342,21 @@ export function Tasks() {
     }
   }
 
+  async function handleDeleteTask() {
+    if (!selected) return
+    setDeleting(true)
+    try {
+      await api.delete(`/tasks/${selected.id}`)
+      setShowDeleteConfirm(false)
+      setSelected(null)
+      load()
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   async function generate() {
     if (selected?.ai_generated) return
     setGenerating(true)
@@ -385,6 +410,7 @@ export function Tasks() {
       status: t.status ?? 'todo',
       priority: t.priority,
       assigned_to: t.assigned_to ?? null,
+      task_type: (t as any).task_type ?? 'task',
       assigned_user_name: t.assigned_user_name ?? null,
       assignees: t.assigned_to ? [{ id: t.assigned_to, name: t.assigned_user_name ?? t.assigned_to }] : [],
       labels: t.tags ?? [],
@@ -516,34 +542,12 @@ export function Tasks() {
         </div>
       )}
 
-      {/* Project scope selector (keeps existing UX, complements Saved Views) */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between shrink-0">
-        <div className="relative w-full sm:max-w-[240px]">
-          <label htmlFor="task-project-filter" className="sr-only">Project scope</label>
-          <FolderKanban className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-          <select
-            id="task-project-filter"
-            value={filterProject}
-            onChange={(e) => setFilterProject(e.target.value)}
-            className="h-[38px] w-full cursor-pointer appearance-none rounded-xl border border-border bg-card py-2 pl-10 pr-9 text-sm font-medium text-foreground shadow-sm transition-colors hover:border-primary/30 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-          >
-            <option value="">All projects</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-        </div>
-      </div>
-
       {/* Create drawer — same style as edit/view (right side modal) */}
       {showCreate && (
         <div className="fixed inset-0 z-[60] flex justify-end" role="dialog" aria-modal="true" aria-labelledby="create-drawer-title">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowCreate(false)} aria-hidden="true" />
-          <div className="relative flex h-dvh w-full flex-col bg-card shadow-xl border-l border-border dark:bg-slate-900 lg:w-[50vw] lg:max-w-[600px] animate-in motion-reduce:animate-none">
-            <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-card px-5 py-4 dark:bg-slate-900">
+          <div className="relative flex h-dvh w-full flex-col bg-card shadow-2xl border-l border-border dark:bg-slate-900 lg:w-[60vw] lg:max-w-[65vw] animate-in motion-reduce:animate-none">
+            <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-gradient-to-r from-primary/[0.04] via-transparent to-transparent px-5 py-4 dark:from-white/[0.04] dark:bg-slate-900">
               <div className="flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-white shadow-sm">
                   <Plus className="h-5 w-5" aria-hidden="true" />
@@ -563,38 +567,18 @@ export function Tasks() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto bg-background p-5 sm:p-6 space-y-5">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-primary/10 bg-primary-light text-primary dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
-                <Plus className="h-5 w-5" aria-hidden="true" />
-              </div>
-              <div>
-                <h3 className="text-[15px] font-semibold tracking-tight text-foreground">Create Task</h3>
-                <p className="text-xs font-medium text-muted-foreground">Add a new task to your project backlog.</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowCreate(false)}
-              className="btn btn-ghost btn-sm cursor-pointer"
-              aria-label="Close create form"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <label htmlFor="task-project" className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-foreground">
-                <FolderKanban className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-                Project <span className="font-normal text-destructive">*</span>
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <label htmlFor="task-project" className="flex items-center gap-2 text-sm font-semibold">
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary"><FolderKanban className="h-3.5 w-3.5" aria-hidden="true" /></span>
+                Project <span className="text-destructive">*</span>
               </label>
-              <div className="relative">
+              <div className="relative group">
                 <select
                   id="task-project"
                   value={form.project_id}
                   onChange={(e) => setForm({ ...form, project_id: e.target.value })}
-                  className="input cursor-pointer appearance-none pr-9"
+                  className="input h-11 cursor-pointer appearance-none pr-10 text-[15px] font-medium bg-card border-border group-hover:border-border focus:border-border focus:ring-0 focus-visible:border-border focus-visible:ring-0 focus-visible:ring-offset-0 transition-all"
                 >
                   {projects.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -602,39 +586,70 @@ export function Tasks() {
                     </option>
                   ))}
                 </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground group-hover:text-primary transition-colors" aria-hidden="true" />
               </div>
+              <p className="text-xs text-muted-foreground">Task will be created in this workspace</p>
             </div>
 
-            <div className="space-y-1.5">
-              <label htmlFor="task-title" className="text-xs font-semibold tracking-wide text-foreground">
-                Title <span className="font-normal text-destructive">*</span>
+            <div className="space-y-2">
+              <label htmlFor="task-title" className="flex items-center gap-2 text-sm font-semibold">
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600"><Hash className="h-3.5 w-3.5" aria-hidden="true" /></span>
+                Task Title <span className="text-destructive">*</span>
               </label>
               <input
                 id="task-title"
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
                 placeholder="e.g. Implement real-time trade blotter"
-                className="input cursor-text"
+                className="input h-11 text-[15px] font-medium bg-card border-border hover:border-border focus:border-border focus:ring-0 focus-visible:border-border focus-visible:ring-0 focus-visible:ring-offset-0 transition-all"
               />
+              <p className="text-xs text-muted-foreground">Clear, actionable title for the assignee</p>
             </div>
 
-            <div className="space-y-1.5 sm:col-span-2">
-              <label htmlFor="task-description" className="text-xs font-semibold tracking-wide text-foreground">
-                Description (Markdown)
+            <div className="space-y-2">
+              <label htmlFor="task-description" className="flex items-center gap-2 text-sm font-semibold">
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600"><FileText className="h-3.5 w-3.5" aria-hidden="true" /></span>
+                Description <span className="text-xs font-normal text-muted-foreground">(Markdown)</span>
               </label>
               <textarea
                 id="task-description"
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
-                rows={4}
-                placeholder="Describe goals, acceptance criteria, and technical notes in Markdown…"
-                className="input min-h-[112px] cursor-text resize-y py-3"
+                rows={10}
+                placeholder="Describe goals, acceptance criteria, and technical notes in Markdown…
+
+**Example:**
+- Validate token
+- Handle expiry
+- Add tests"
+                className="input min-h-[280px] cursor-text resize-y py-3.5 text-[14px] leading-relaxed bg-card border-border hover:border-border focus:border-border focus:ring-0 focus-visible:border-border focus-visible:ring-0 focus-visible:ring-offset-0 transition-all font-mono"
               />
+              <p className="text-xs text-muted-foreground">Supports <span className="font-mono font-medium">Markdown</span> — preview in task view</p>
             </div>
 
-            <div className="space-y-1.5">
-              <label htmlFor="task-priority" className="text-xs font-semibold tracking-wide text-foreground">
+            <div className="space-y-2">
+              <label htmlFor="task-type" className="flex items-center gap-2 text-sm font-semibold">
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600"><Tag className="h-3.5 w-3.5" aria-hidden="true" /></span>
+                Task Type
+              </label>
+              <div className="relative">
+                <select
+                  id="task-type"
+                  value={form.task_type}
+                  onChange={(e) => setForm({ ...form, task_type: e.target.value })}
+                  className="input h-11 cursor-pointer appearance-none pr-9 bg-card border-border hover:border-border focus:border-border focus:ring-0 focus-visible:border-border focus-visible:ring-0 focus-visible:ring-offset-0 transition-colors"
+                >
+                  <option value="task">Task</option>
+                  <option value="bug">Bug</option>
+                  <option value="feature">Feature</option>
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="task-priority" className="flex items-center gap-2 text-sm font-semibold">
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-orange-500/10 text-orange-600"><AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" /></span>
                 Priority
               </label>
               <div className="relative">
@@ -642,7 +657,7 @@ export function Tasks() {
                   id="task-priority"
                   value={form.priority}
                   onChange={(e) => setForm({ ...form, priority: e.target.value })}
-                  className="input cursor-pointer appearance-none pr-9"
+                  className="input h-11 cursor-pointer appearance-none pr-9 bg-card border-border hover:border-border focus:border-border focus:ring-0 focus-visible:border-border focus-visible:ring-0 focus-visible:ring-offset-0 transition-colors"
                 >
                   <option value="low">{priorityLabel('low')}</option>
                   <option value="medium">{priorityLabel('medium')}</option>
@@ -653,8 +668,9 @@ export function Tasks() {
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label htmlFor="task-status" className="text-xs font-semibold tracking-wide text-foreground">
+            <div className="space-y-2">
+              <label htmlFor="task-status" className="flex items-center gap-2 text-sm font-semibold">
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600"><Clock3 className="h-3.5 w-3.5" aria-hidden="true" /></span>
                 Status
               </label>
               <div className="relative">
@@ -662,7 +678,7 @@ export function Tasks() {
                   id="task-status"
                   value={form.status}
                   onChange={(e) => setForm({ ...form, status: e.target.value })}
-                  className="input cursor-pointer appearance-none pr-9"
+                  className="input h-11 cursor-pointer appearance-none pr-9 bg-card border-border hover:border-border focus:border-border focus:ring-0 focus-visible:border-border focus-visible:ring-0 focus-visible:ring-offset-0 transition-colors"
                 >
                   <option value="todo">{statusLabel('todo')}</option>
                   <option value="in_progress">{statusLabel('in_progress')}</option>
@@ -674,9 +690,9 @@ export function Tasks() {
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label htmlFor="task-assigned" className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-foreground">
-                <User className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+            <div className="space-y-2">
+              <label htmlFor="task-assigned" className="flex items-center gap-2 text-sm font-semibold">
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600"><User className="h-3.5 w-3.5" aria-hidden="true" /></span>
                 Assigned To
               </label>
               <div className="relative">
@@ -684,7 +700,7 @@ export function Tasks() {
                   id="task-assigned"
                   value={form.assigned_to}
                   onChange={(e) => setForm({ ...form, assigned_to: e.target.value })}
-                  className="input cursor-pointer appearance-none pr-9"
+                  className="input h-11 cursor-pointer appearance-none pr-9 bg-card border-border hover:border-border focus:border-border focus:ring-0 focus-visible:border-border focus-visible:ring-0 focus-visible:ring-offset-0 transition-colors"
                 >
                   <option value="">Unassigned</option>
                   {users.map((u) => (
@@ -697,19 +713,87 @@ export function Tasks() {
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label htmlFor="task-tags" className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-foreground">
-                <Tag className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-                Tags
+            <div className="space-y-2 sm:col-span-2">
+              <label htmlFor="task-tags" className="flex items-center justify-between gap-2 text-sm font-semibold">
+                <span className="flex items-center gap-2"><span className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600"><Tag className="h-3.5 w-3.5" aria-hidden="true" /></span> Labels <span className="text-xs font-normal text-muted-foreground">— add many</span></span>
+                <span className="text-[11px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{form.tags.split(',').filter(s=>s.trim()).length} selected</span>
               </label>
-              <input
-                id="task-tags"
-                value={form.tags}
-                onChange={(e) => setForm({ ...form, tags: e.target.value })}
-                placeholder="comma separated"
-                className="input cursor-text"
-              />
-              <p className="text-[11px] font-medium text-muted-foreground">Comma separated values</p>
+              <div className="group relative flex flex-wrap gap-1.5 p-2.5 rounded-xl border border-border bg-card min-h-[48px] focus-within:border-border focus-within:ring-0 focus-within:ring-offset-0 hover:border-border dark:hover:border-border transition-all shadow-sm">
+                {form.tags.split(',').map(s=>s.trim()).filter(Boolean).map((t) => {
+                  const colors: Record<string,string> = {
+                    bug: 'bg-red-500 text-white border-red-600',
+                    feature: 'bg-blue-500 text-white border-blue-600',
+                    urgent: 'bg-amber-500 text-white border-amber-600',
+                    enhancement: 'bg-emerald-500 text-white border-emerald-600',
+                  }
+                  const cls = colors[t.toLowerCase()] || 'bg-primary text-white border-primary'
+                  return (
+                    <span key={t} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold shadow-sm hover:shadow-md hover:scale-[1.02] transition-all ${cls}`}>
+                      {t}
+                      <button type="button" onClick={() => setForm({ ...form, tags: form.tags.split(',').map(s=>s.trim()).filter(s=>s!==t).join(', ') })} className="ml-0.5 rounded-full bg-white/20 hover:bg-white/30 p-0.5 -mr-1">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  )
+                })}
+                <input
+                  id="task-tags"
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onFocus={() => {}}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ',') {
+                      e.preventDefault()
+                      const parts = tagInput.split(',').map(s=>s.trim()).filter(Boolean)
+                      let newTags = form.tags
+                      for (const val of parts) {
+                        if (val && !newTags.split(',').map(s=>s.trim()).includes(val)) {
+                          newTags = newTags ? `${newTags}, ${val}` : val
+                        }
+                      }
+                      if (newTags !== form.tags) setForm({ ...form, tags: newTags })
+                      setTagInput('')
+                    } else if (e.key === 'Backspace' && !tagInput && form.tags) {
+                      const tags = form.tags.split(',').map(s=>s.trim()).filter(Boolean)
+                      tags.pop()
+                      setForm({ ...form, tags: tags.join(', ') })
+                    }
+                  }}
+                  onBlur={() => {
+                    const parts = tagInput.split(',').map(s=>s.trim()).filter(Boolean)
+                    let newTags = form.tags
+                    for (const val of parts) {
+                      if (val && !newTags.split(',').map(s=>s.trim()).includes(val)) {
+                        newTags = newTags ? `${newTags}, ${val}` : val
+                      }
+                    }
+                    if (newTags !== form.tags) setForm({ ...form, tags: newTags })
+                    setTimeout(()=>setTagInput(''), 150)
+                  }}
+                  placeholder={form.tags ? "Add more labels…" : "Type label + Enter — e.g. urgent, backend, ui"}
+                  className="flex-1 min-w-[120px] bg-transparent outline-none text-sm placeholder:text-muted-foreground py-1 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 border-0 shadow-none"
+                />
+                {(() => {
+                  const suggested = ['bug','feature','enhancement','urgent','backend','frontend','ui','api','design','docs','critical','high','low']
+                  const filtered = tagInput ? suggested.filter(s => s.toLowerCase().includes(tagInput.toLowerCase()) && !form.tags.split(',').map(t=>t.trim().toLowerCase()).includes(s.toLowerCase())).slice(0,5) : []
+                  if (!filtered.length) return null
+                  return (
+                    <div className="absolute left-0 top-full mt-2 z-10 w-48 rounded-xl border border-border bg-card shadow-lg p-1">
+                      {filtered.map(s => (
+                        <button
+                          key={s}
+                          type="button"
+                          onMouseDown={(e)=>{ e.preventDefault(); const newTags = form.tags ? `${form.tags}, ${s}` : s; setForm({...form, tags: newTags}); setTagInput('') }}
+                          className="w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-primary hover:text-white transition-colors flex items-center gap-2"
+                        >
+                          <Tag className="w-3 h-3" /> {s}
+                        </button>
+                      ))}
+                    </div>
+                  )
+                })()}
+              </div>
+              <p className="text-[11px] font-medium text-muted-foreground">Press <span className="font-mono bg-muted px-1 py-0.5 rounded">Enter</span> or <span className="font-mono bg-muted px-1 py-0.5 rounded">,</span> to add • Click × to remove</p>
             </div>
           </div>
 
@@ -759,9 +843,9 @@ export function Tasks() {
             onClick={() => setSelected(null)}
             aria-hidden="true"
           />
-          <div className="relative flex h-dvh w-full flex-col bg-card shadow-xl border-l border-border dark:bg-slate-900 lg:w-[60vw] lg:max-w-[65vw] animate-in motion-reduce:animate-none">
-            {/* Header with inline title editing — solid, no translucency gap */}
-            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border bg-card px-5 py-4 dark:bg-slate-900 sm:px-6">
+          <div className="relative flex h-dvh w-full flex-col bg-card shadow-2xl border-l border-border dark:bg-slate-900 lg:w-[60vw] lg:max-w-[65vw] animate-in motion-reduce:animate-none">
+            {/* Header — premium business */}
+            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border bg-gradient-to-r from-primary/[0.04] via-transparent to-transparent px-5 py-4 dark:from-white/[0.04] dark:bg-slate-900 sm:px-6">
               <div className="min-w-0 flex-1 space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={statusTone(selected.status)}>{statusLabel(selected.status)}</span>
@@ -876,6 +960,24 @@ export function Tasks() {
                     </div>
                   </div>
 
+                  {/* Task Type — auto-save */}
+                  <div className="space-y-1.5">
+                    <label htmlFor="field-tasktype" className="text-xs font-semibold tracking-wide text-foreground">Task Type</label>
+                    <div className="relative">
+                      <select
+                        id="field-tasktype"
+                        value={selected.task_type ?? 'task'}
+                        onChange={(e) => void patchTask({ task_type: e.target.value })}
+                        className="input cursor-pointer appearance-none pr-9"
+                      >
+                        <option value="task">Task</option>
+                        <option value="bug">Bug</option>
+                        <option value="feature">Feature</option>
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                    </div>
+                  </div>
+
                   {/* Status — auto-save */}
                   <div className="space-y-1.5">
                     <label htmlFor="field-status" className="text-xs font-semibold tracking-wide text-foreground">Status</label>
@@ -942,7 +1044,7 @@ export function Tasks() {
                       <button
                         type="button"
                         onClick={() => { setTagsDraft(selected.tags?.join(', ') ?? ''); setTagsEditing(true) }}
-                        className="flex w-full flex-wrap gap-1.5 rounded-xl border border-border bg-card px-3 py-2.5 text-left hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer min-h-[44px] items-center"
+                        className="flex w-full flex-wrap gap-1.5 rounded-xl border border-border bg-card px-3 py-2.5 text-left hover:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer min-h-[44px] items-center"
                       >
                         {selected.tags?.length ? (
                           selected.tags.map((tag: string) => (
@@ -1140,6 +1242,37 @@ export function Tasks() {
                 )}
               </section>
 
+              {/* Delete Task — smart business danger zone */}
+              <section className="relative overflow-hidden rounded-2xl border border-red-200 bg-gradient-to-r from-red-50/90 to-white shadow-sm dark:from-red-950/20 dark:to-slate-900 dark:border-red-900/30">
+                <div className="absolute left-0 top-0 h-full w-1 bg-red-500" aria-hidden="true" />
+                <div className="p-4 sm:p-5 space-y-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm shrink-0">
+                      <Trash2 className="h-4 w-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white">Danger Zone</h3>
+                      <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400 mt-1">
+                        Permanently delete <span className="font-semibold text-slate-900 dark:text-white">“{selected?.title}”</span> and all versions/activity. This is <span className="font-bold text-red-600 dark:text-red-400">irreversible</span>.
+                      </p>
+                    </div>
+                    <span className="hidden sm:inline-flex items-center rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-bold text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800">Irreversible</span>
+                  </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-red-100 dark:border-red-900/20">
+                    <p className="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                      <AlertCircle className="h-3.5 w-3.5" /> Business data will be permanently lost
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-red-600 shadow-sm ring-1 ring-red-200 hover:bg-red-50 hover:text-red-700 hover:ring-red-300 dark:bg-slate-800 dark:text-red-400 dark:ring-red-900 dark:hover:bg-red-950/40 transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" /> Delete Task
+                    </button>
+                  </div>
+                </div>
+              </section>
+
               {/* Versions */}
               <section className="card space-y-4">
                 <h3 className="inline-flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground">
@@ -1177,6 +1310,37 @@ export function Tasks() {
               </section>
             </div>
           </div>
+          {/* Delete confirmation — smart business modal */}
+          {showDeleteConfirm && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !deleting && setShowDeleteConfirm(false)} aria-hidden="true" />
+              <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-border bg-card shadow-2xl animate-in">
+                <div className="bg-gradient-to-r from-red-50 to-white dark:from-red-950/20 dark:to-slate-900 px-6 py-5 border-b border-red-100 dark:border-red-900/20">
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm shrink-0">
+                      <Trash2 className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 id="delete-title" className="text-base font-bold tracking-tight">Delete “{selected?.title}”?</h3>
+                      <p className="mt-1 text-sm leading-relaxed text-slate-600 dark:text-slate-400">This will permanently remove the task and all its history.</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="px-6 py-4 space-y-4">
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 flex gap-2.5 dark:bg-amber-950/20 dark:border-amber-900/50">
+                    <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-200"><span className="font-bold">Irreversible:</span> Versions, activity and assignments will be lost. Use with caution.</p>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button type="button" onClick={() => setShowDeleteConfirm(false)} disabled={deleting} className="btn btn-ghost h-10 px-5 disabled:opacity-50">Cancel</button>
+                    <button type="button" onClick={handleDeleteTask} disabled={deleting} className="btn bg-red-600 text-white hover:bg-red-700 h-10 px-6 gap-2 shadow-sm disabled:opacity-50">
+                      {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} {deleting ? 'Deleting...' : 'Delete forever'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </>

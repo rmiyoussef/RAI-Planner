@@ -300,7 +300,7 @@ export function Users() {
                 value={form.github_url}
                 onChange={(e) => setForm({ ...form, github_url: e.target.value })}
                 placeholder="https://github.com/octocat"
-                className={`input cursor-text font-mono text-[13px] ${form.github_url && !githubValid ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20' : ''}`}
+                className={`input cursor-text font-mono text-[13px] ${form.github_url && !githubValid ? 'border-red-300 focus:border-red-300 focus:ring-0 focus-visible:border-red-300 focus-visible:ring-0' : ''}`}
                 aria-invalid={!!form.github_url && !githubValid}
                 aria-describedby="github-help"
               />
@@ -464,7 +464,7 @@ export function Users() {
                             value={editForm.github_url ?? ''}
                             onChange={(e) => setEditForm({ ...editForm, github_url: e.target.value })}
                             placeholder="https://github.com/username"
-                            className={`input h-9 cursor-text py-1.5 font-mono text-xs ${editForm.github_url && !editGithubValid ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20' : ''}`}
+                            className={`input h-9 cursor-text py-1.5 font-mono text-xs ${editForm.github_url && !editGithubValid ? 'border-red-300 focus:border-red-300 focus:ring-0 focus-visible:border-red-300 focus-visible:ring-0' : ''}`}
                             aria-invalid={!!editForm.github_url && !editGithubValid}
                           />
                           {editForm.github_url && !editGithubValid && (

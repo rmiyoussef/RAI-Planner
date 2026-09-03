@@ -25,6 +25,7 @@ type ColDef = { key: ColKey; label: string; icon?: any; width: number; sticky?: 
 const COL_DEFS: Record<string, ColDef> = {
   rowNumber: { key: 'rowNumber', label: '#', width: 52, sticky: true, left: 0 },
   title: { key: 'title', label: 'Title', width: 308, sticky: true, left: 52 },
+  task_type: { key: 'task_type', label: 'Type', width: 110, icon: Tag },
   module: { key: 'module', label: 'Module', width: 148, icon: FolderKanban },
   assignees: { key: 'assignees', label: 'Assignees', width: 160, icon: Users },
   labels: { key: 'labels', label: 'Labels', width: 160, icon: Tag },
@@ -237,8 +238,8 @@ export function GroupedTable({
   return (
     <div className="flex-1 min-h-0 overflow-auto bg-white dark:bg-slate-900 scrollbar-thin">
       <div style={{ minWidth: totalWidth }} className="min-w-full">
-        {/* Table header - sticky */}
-        <div className="sticky top-0 z-10 flex border-b border-slate-200 bg-[#f8f9fb] text-xs font-semibold text-slate-500 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400">
+        {/* Table header - sticky, premium */}
+        <div className="sticky top-0 z-10 flex border-b border-slate-200 bg-white text-xs font-semibold tracking-wide text-slate-500 shadow-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400">
           {colDefs.map((col) => (
             <ColumnHeader
               key={col.key}
@@ -281,7 +282,7 @@ export function GroupedTable({
               <button
                 type="button"
                 onClick={() => setCollapsed((m) => ({ ...m, [groupKey]: !m[groupKey] }))}
-                className="flex w-full items-center gap-2 bg-[#fcfcfd] px-3 py-2.5 text-left hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800/80"
+                className="flex w-full items-center gap-2 bg-slate-50/80 px-3 py-2.5 text-left backdrop-blur-sm hover:bg-slate-100 dark:bg-slate-800/50 dark:hover:bg-slate-800"
               >
                 <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
                 {meta ? (
@@ -328,7 +329,7 @@ export function GroupedTable({
                             if (e.key === 'Escape') setAddDraft((m) => { const n = { ...m }; delete n[groupKey]; return n })
                           }}
                           placeholder={`Add item to ${meta?.label ?? groupKey}...`}
-                          className="flex-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 dark:bg-slate-800 dark:border-slate-700 dark:text-white"
+                          className="flex-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none placeholder:text-slate-400 focus:border-slate-200 focus:outline-none focus:ring-0 focus-visible:border-slate-200 focus-visible:outline-none focus-visible:ring-0 dark:bg-slate-800 dark:border-slate-700 dark:text-white dark:focus:border-slate-700 dark:focus-visible:border-slate-700"
                         />
                         <button onClick={() => { const title = addDraft[groupKey]?.trim(); if (title && onCreateInGroup) { (onCreateInGroup as any)?.(groupKey, title); setAddDraft((m) => { const n = { ...m }; delete n[groupKey]; return n }) } }} className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-primary-hover dark:bg-white dark:text-slate-900">
                           Add
@@ -401,6 +402,31 @@ function Row({
                   {task.title}
                 </span>
               </button>
+            </div>
+          )
+        }
+        if (col.key === 'task_type') {
+          const t = (task as any).task_type || 'task'
+          const map: Record<string, { label: string; cls: string }> = {
+            bug: { label: 'Bug', cls: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900' },
+            feature: { label: 'Feature', cls: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900' },
+            task: { label: 'Task', cls: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700' },
+          }
+          const cur = map[t] || map.task
+          return (
+            <div key={col.key} className={base} style={style}>
+              <InlineDropdown
+                value={t}
+                options={[
+                  { value: 'task', label: 'Task' },
+                  { value: 'bug', label: 'Bug' },
+                  { value: 'feature', label: 'Feature' },
+                ]}
+                onChange={(v) => onPatch?.(task.id, { task_type: v as string })}
+                renderValue={() => (
+                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${cur.cls}`}>{cur.label}</span>
+                )}
+              />
             </div>
           )
         }

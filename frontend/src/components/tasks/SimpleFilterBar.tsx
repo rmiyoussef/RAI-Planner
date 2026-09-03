@@ -30,9 +30,9 @@ export function SimpleFilterBar({
   const hasActive = !!(filters.project || filters.assignee || filters.status || filters.date || filters.title)
 
   return (
-    <div className="flex flex-col gap-3 border-b border-slate-200 bg-[#f8f9fb] px-3 py-3 dark:bg-slate-900 dark:border-slate-800">
+    <div className="flex flex-col gap-3 border-b border-slate-200 bg-white px-3 py-3 dark:bg-slate-900 dark:border-slate-800 shadow-sm">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 mr-1">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary border border-primary/20 mr-1">
           <Filter className="h-3.5 w-3.5" /> Filters
         </span>
 
@@ -41,7 +41,7 @@ export function SimpleFilterBar({
           <select
             value={filters.project}
             onChange={(e) => update({ project: e.target.value })}
-            className="h-9 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 pr-8 text-sm font-medium text-slate-700 hover:border-slate-300 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+            className="h-9 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 pr-8 text-sm font-medium text-slate-700 hover:border-slate-200 focus:border-slate-200 focus:outline-none focus:ring-0 focus-visible:border-slate-200 focus-visible:outline-none focus-visible:ring-0 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 dark:focus:border-slate-700 dark:focus-visible:border-slate-700"
           >
             <option value="">All projects</option>
             {projects.map((p) => (
@@ -55,7 +55,7 @@ export function SimpleFilterBar({
           <select
             value={filters.assignee}
             onChange={(e) => update({ assignee: e.target.value })}
-            className="h-9 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 pr-8 text-sm font-medium text-slate-700 hover:border-slate-300 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+            className="h-9 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 pr-8 text-sm font-medium text-slate-700 hover:border-slate-200 focus:border-slate-200 focus:outline-none focus:ring-0 focus-visible:border-slate-200 focus-visible:outline-none focus-visible:ring-0 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 dark:focus:border-slate-700 dark:focus-visible:border-slate-700"
           >
             <option value="">All assignees</option>
             <option value="unassigned">Unassigned</option>
@@ -70,7 +70,7 @@ export function SimpleFilterBar({
           <select
             value={filters.status}
             onChange={(e) => update({ status: e.target.value })}
-            className="h-9 min-w-[130px] rounded-lg border border-slate-200 bg-white px-3 pr-8 text-sm font-medium text-slate-700 hover:border-slate-300 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+            className="h-9 min-w-[130px] rounded-lg border border-slate-200 bg-white px-3 pr-8 text-sm font-medium text-slate-700 hover:border-slate-200 focus:border-slate-200 focus:outline-none focus:ring-0 focus-visible:border-slate-200 focus-visible:outline-none focus-visible:ring-0 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 dark:focus:border-slate-700 dark:focus-visible:border-slate-700"
           >
             <option value="">All statuses</option>
             <option value="todo">Planning</option>
@@ -88,7 +88,7 @@ export function SimpleFilterBar({
             type="date"
             value={filters.date}
             onChange={(e) => update({ date: e.target.value })}
-            className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+            className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-slate-700 focus:border-slate-200 focus:outline-none focus:ring-0 focus-visible:border-slate-200 focus-visible:outline-none focus-visible:ring-0 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 dark:focus:border-slate-700 dark:focus-visible:border-slate-700"
             title="Filter by created date"
           />
         </div>
@@ -100,7 +100,7 @@ export function SimpleFilterBar({
             value={filters.title}
             onChange={(e) => update({ title: e.target.value })}
             placeholder="Search title..."
-            className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-8 text-sm placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:bg-slate-800 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-500"
+            className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-8 text-sm placeholder:text-slate-400 focus:border-slate-200 focus:outline-none focus:ring-0 focus-visible:border-slate-200 focus-visible:outline-none focus-visible:ring-0 dark:bg-slate-800 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-500 dark:focus:border-slate-700 dark:focus-visible:border-slate-700"
           />
           {filters.title && (
             <button
@@ -114,15 +114,16 @@ export function SimpleFilterBar({
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          <span className="inline-flex items-center rounded-full bg-primary px-2.5 py-1 text-xs font-semibold tabular-nums text-white shadow-sm">
-            {resultCount}
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 text-xs font-semibold tabular-nums text-white shadow-sm ring-1 ring-primary/20">
+            <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+            {resultCount} found
           </span>
           {hasActive && (
             <button
               onClick={clearAll}
-              className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-800 hover:border-slate-300 shadow-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
             >
-              <X className="h-3.5 w-3.5" /> Clear
+              <X className="h-3.5 w-3.5" /> Clear all
             </button>
           )}
         </div>

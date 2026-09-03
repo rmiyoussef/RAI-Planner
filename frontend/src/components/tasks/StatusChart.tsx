@@ -21,9 +21,12 @@ export function StatusChart({ tasks }: { tasks: { status: string }[] }) {
   const max = Math.max(...order.map((k) => counts[k] || 0), 1)
 
   return (
-    <div className="border-b border-slate-200 bg-white px-3 py-3 dark:bg-slate-900 dark:border-slate-800">
+    <div className="border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white px-3 py-3 dark:from-slate-800/50 dark:to-slate-900 dark:border-slate-800">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 mr-1">By status</span>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary border border-primary/20 mr-1">
+          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+          By status
+        </span>
         {order.map((k) => {
           const meta = getStatusMeta(k)
           const cnt = counts[k] || 0

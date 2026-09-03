@@ -3,6 +3,7 @@ from typing import Optional, List, Literal, Any
 
 TaskPriority = Literal["low", "medium", "high", "critical"]
 TaskStatus = Literal["todo", "in_progress", "in_review", "done", "archived"]
+TaskType = Literal["bug", "feature", "task"]
 
 class TaskCreate(BaseModel):
     project_id: str = Field(min_length=1)
@@ -12,6 +13,7 @@ class TaskCreate(BaseModel):
     status: TaskStatus = "todo"
     assigned_to: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
+    task_type: TaskType = "task"
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = Field(default=None, min_length=1, max_length=300)
@@ -20,6 +22,7 @@ class TaskUpdate(BaseModel):
     status: Optional[TaskStatus] = None
     assigned_to: Optional[str] = None
     tags: Optional[List[str]] = None
+    task_type: Optional[TaskType] = None
 
 class TaskResponse(BaseModel):
     id: str
@@ -33,6 +36,7 @@ class TaskResponse(BaseModel):
     assigned_to: Optional[str] = None
     assigned_user_name: Optional[str] = None
     tags: List[str]
+    task_type: str = "task"
     ai_generated: bool = False
     version: int = 1
     created_at: str
@@ -52,6 +56,7 @@ class TaskVersionResponse(BaseModel):
     status: str
     assigned_to: Optional[str] = None
     tags: List[str]
+    task_type: str = "task"
     created_at: str
 
 class TaskActivityResponse(BaseModel):

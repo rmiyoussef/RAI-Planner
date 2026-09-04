@@ -8,6 +8,28 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
+# Allowed collections — prevents SQL injection via table name and limits surface
+ALLOWED_COLLECTIONS = {
+    "owners",
+    "company_settings",
+    "projects",
+    "tasks",
+    "task_versions",
+    "task_activities",
+    "users",
+    "ai_configs",
+    "agent_skills",
+    "agent_settings",
+    "skills",
+}
+
+def _validate_collection_name(name: str):
+    if name not in ALLOWED_COLLECTIONS:
+        # For backwards compat, allow any alphanumeric + underscore, but block injection
+        if not name.replace("_", "").isalnum() or len(name) > 64:
+            raise ValueError(f"Invalid collection name: {name}")
+        logger.warning(f"Using non-whitelisted collection: {name}")
+
 # Global in-memory fallback with file persistence so restarts don't log everyone out
 _PERSIST_PATH = pathlib.Path(__file__).resolve().parent.parent.parent / ".memory_db.json"
 _memory_db: Dict[str, Dict[str, Dict[str, Any]]] = {}
@@ -38,6 +60,7 @@ def _save_persist():
 
 class InMemoryCollection:
     def __init__(self, name: str):
+        _validate_collection_name(name)
         self.name = name
         if name not in _memory_db:
             _memory_db[name] = {}
@@ -163,46 +186,195 @@ def _matches(doc: Dict[str, Any], filt: Dict[str, Any]) -> bool:
                 return False
     return True
 
-# Mongo wrapper
+# PostgreSQL implementation
 
-_mongo_client = None
-_mongo_db = None
-_use_memory = False
+_pg_pool = None
+_pg_lock = asyncio.Lock()
+_use_postgres = False
+
+async def _ensure_pg_table(pool, name: str):
+    _validate_collection_name(name)
+    # simple table with id TEXT PK and data JSONB
+    # use quoted identifier to be safe
+    safe = '"' + name.replace('"', '""') + '"'
+    async with pool.acquire() as conn:
+        await conn.execute(f'CREATE TABLE IF NOT EXISTS {safe} (id TEXT PRIMARY KEY, data JSONB)')
+
+class PostgresCollection:
+    def __init__(self, name: str, pool):
+        _validate_collection_name(name)
+        self.name = name
+        self.pool = pool
+        self._safe = '"' + name.replace('"', '""') + '"'
+
+    async def _ensure(self):
+        await _ensure_pg_table(self.pool, self.name)
+
+    async def insert_one(self, doc: Dict[str, Any]):
+        await self._ensure()
+        _id = doc.get("_id") or str(uuid.uuid4())
+        doc["_id"] = _id
+        # store copy
+        data_json = json.dumps(doc, default=str)
+        async with self.pool.acquire() as conn:
+            await conn.execute(f'INSERT INTO {self._safe} (id, data) VALUES ($1, $2::jsonb) ON CONFLICT (id) DO UPDATE SET data = $2::jsonb', _id, data_json)
+        class R: inserted_id = _id
+        return R()
+
+    async def find_one(self, filt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        await self._ensure()
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(f'SELECT data FROM {self._safe}')
+            for r in rows:
+                doc = r['data']
+                # asyncpg may return dict or string
+                if isinstance(doc, str):
+                    doc = json.loads(doc)
+                if _matches(doc, filt):
+                    return doc
+            return None
+
+    async def find(self, filt: Dict[str, Any] = None, sort=None, skip=0, limit=0):
+        await self._ensure()
+        filt = filt or {}
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(f'SELECT data FROM {self._safe}')
+            docs = []
+            for r in rows:
+                doc = r['data']
+                if isinstance(doc, str):
+                    doc = json.loads(doc)
+                if _matches(doc, filt):
+                    docs.append(doc)
+        if sort:
+            for key, direction in reversed(sort):
+                docs.sort(key=lambda x: x.get(key) or "", reverse=(direction == -1))
+        if skip:
+            docs = docs[skip:]
+        if limit:
+            docs = docs[:limit]
+        return InMemoryCursor(docs)
+
+    async def update_one(self, filt: Dict[str, Any], update: Dict[str, Any]):
+        await self._ensure()
+        # find matching doc
+        doc = await self.find_one(filt)
+        if not doc:
+            class R: modified_count = 0
+            return R()
+        _id = doc["_id"]
+        if "$set" in update:
+            doc.update(update["$set"])
+        if "$inc" in update:
+            for k, v in update["$inc"].items():
+                doc[k] = doc.get(k, 0) + v
+        data_json = json.dumps(doc, default=str)
+        async with self.pool.acquire() as conn:
+            await conn.execute(f'UPDATE {self._safe} SET data = $1::jsonb WHERE id = $2', data_json, _id)
+        class R: modified_count = 1
+        return R()
+
+    async def delete_one(self, filt: Dict[str, Any]):
+        await self._ensure()
+        doc = await self.find_one(filt)
+        if not doc:
+            class R: deleted_count = 0
+            return R()
+        _id = doc["_id"]
+        async with self.pool.acquire() as conn:
+            await conn.execute(f'DELETE FROM {self._safe} WHERE id = $1', _id)
+        class R: deleted_count = 1
+        return R()
+
+    async def count_documents(self, filt: Dict[str, Any]) -> int:
+        await self._ensure()
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(f'SELECT data FROM {self._safe}')
+            cnt = 0
+            for r in rows:
+                doc = r['data']
+                if isinstance(doc, str):
+                    doc = json.loads(doc)
+                if _matches(doc, filt):
+                    cnt += 1
+            return cnt
+
+    async def create_index(self, *args, **kwargs):
+        # no-op for now, but could create GIN index on data
+        return
 
 async def init_db():
-    global _mongo_client, _mongo_db, _use_memory
+    global _pg_pool, _use_postgres
     from .config import get_settings
     settings = get_settings()
-    if not settings.MONGODB_URI:
-        logger.info("MONGODB_URI not set, using in-memory database (persisted to .memory_db.json)")
-        _use_memory = True
-        _load_persist()
-        return
-    try:
-        from motor.motor_asyncio import AsyncIOMotorClient
-        _mongo_client = AsyncIOMotorClient(settings.MONGODB_URI, serverSelectionTimeoutMS=2000)
-        await _mongo_client.admin.command('ping')
-        _mongo_db = _mongo_client[settings.MONGODB_DATABASE]
-        # create indexes
-        await _mongo_db["owners"].create_index("email", unique=True)
-        await _mongo_db["projects"].create_index([("owner_id", 1), ("status", 1)])
-        await _mongo_db["projects"].create_index([("created_at", -1)])
-        await _mongo_db["tasks"].create_index([("owner_id", 1), ("project_id", 1)])
-        await _mongo_db["tasks"].create_index([("status", 1)])
-        await _mongo_db["tasks"].create_index([("priority", 1)])
-        await _mongo_db["task_versions"].create_index([("task_id", 1), ("version", 1)])
-        await _mongo_db["task_activities"].create_index([("task_id", 1)])
-        await _mongo_db["users"].create_index([("owner_id", 1)])
-        logger.info("Connected to MongoDB")
-        _use_memory = False
-    except Exception as e:
-        logger.warning(f"MongoDB connection failed, falling back to memory: {e}")
-        _use_memory = True
+    # Prefer PostgreSQL if URI set
+    pg_uri = getattr(settings, 'POSTGRES_URI', '') or ""
+    # fallback to MONGODB_URI for backwards compat (but we want postgres)
+    if pg_uri:
+        try:
+            import asyncpg
+            # try to connect with 2s timeout
+            _pg_pool = await asyncpg.create_pool(dsn=pg_uri, min_size=1, max_size=5, command_timeout=5)
+            # test connection
+            async with _pg_pool.acquire() as conn:
+                await conn.execute('SELECT 1')
+            # ensure core tables exist
+            for t in ["owners", "company_settings", "projects", "tasks", "task_versions", "task_activities", "users", "ai_configs", "agent_skills"]:
+                await _ensure_pg_table(_pg_pool, t)
+            # migrate from file if postgres empty but file has data
+            try:
+                if _PERSIST_PATH.exists():
+                    data = json.loads(_PERSIST_PATH.read_text())
+                    if isinstance(data, dict) and data:
+                        # check if postgres is empty
+                        empty = True
+                        for col in data.keys():
+                            cnt = 0
+                            try:
+                                async with _pg_pool.acquire() as conn:
+                                    rows = await conn.fetch(f'SELECT count(*) FROM "{col.replace(chr(34), chr(34)+chr(34))}"')
+                                    if rows:
+                                        cnt = rows[0][0]
+                            except:
+                                cnt = 0
+                            if cnt > 0:
+                                empty = False
+                                break
+                        if empty:
+                            logger.info("Migrating in-memory file data to PostgreSQL...")
+                            for col_name, docs in data.items():
+                                if not isinstance(docs, dict):
+                                    continue
+                                for doc in docs.values():
+                                    try:
+                                        safe = '"' + col_name.replace('"', '""') + '"'
+                                        _id = doc.get("_id") or str(uuid.uuid4())
+                                        doc["_id"] = _id
+                                        j = json.dumps(doc, default=str)
+                                        async with _pg_pool.acquire() as conn:
+                                            await conn.execute(f'INSERT INTO {safe} (id, data) VALUES ($1, $2::jsonb) ON CONFLICT (id) DO NOTHING', _id, j)
+                                    except Exception as e:
+                                        logger.warning(f"Migration failed for {col_name}/{_id}: {e}")
+                            logger.info("Migration to PostgreSQL done")
+            except Exception as e:
+                logger.warning(f"Migration check failed: {e}")
+            logger.info(f"Connected to PostgreSQL at {pg_uri.split('@')[-1]}")
+            _use_postgres = True
+            return
+        except Exception as e:
+            logger.warning(f"PostgreSQL connection failed ({pg_uri.split('@')[-1] if '@' in pg_uri else pg_uri}): {e} — falling back to in-memory")
+            _pg_pool = None
+            _use_postgres = False
+    # fallback to in-memory
+    logger.info("Using in-memory database (persisted to .memory_db.json)")
+    _load_persist()
 
 def get_collection(name: str):
-    if _use_memory or _mongo_db is None:
-        return InMemoryCollection(name)
-    return _mongo_db[name]
+    _validate_collection_name(name)
+    if _use_postgres and _pg_pool is not None:
+        return PostgresCollection(name, _pg_pool)
+    # fallback to in-memory (handles both file and mock)
+    return InMemoryCollection(name)
 
 def utc_now():
     return datetime.now(timezone.utc).isoformat()
@@ -212,6 +384,20 @@ def new_id() -> str:
     return str(uuid.uuid4())
 
 async def clear_memory_db():
+    # for tests: clear both postgres and file if using postgres, else file
+    if _use_postgres and _pg_pool is not None:
+        # clear postgres tables for test isolation
+        try:
+            async with _pg_pool.acquire() as conn:
+                # get all tables we know
+                for t in ["owners", "company_settings", "projects", "tasks", "task_versions", "task_activities", "users", "ai_configs", "agent_skills"]:
+                    try:
+                        safe = '"' + t.replace('"', '""') + '"'
+                        await conn.execute(f'DELETE FROM {safe}')
+                    except:
+                        pass
+        except Exception as e:
+            logger.warning(f"Failed to clear postgres: {e}")
     async with _memory_lock:
         _memory_db.clear()
         _save_persist()

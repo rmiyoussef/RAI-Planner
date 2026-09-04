@@ -19,5 +19,11 @@ def rate_limit(request: Request, scope: str, limit: int, window_seconds: int) ->
     while q and now - q[0] > window_seconds:
         q.popleft()
     if len(q) >= limit:
-        raise HTTPException(status_code=429, detail="Too many requests. Please try again later.")
+        retry_after = int(window_seconds - (now - q[0])) if q else window_seconds
+        retry_after = max(1, retry_after)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many requests. Please try again in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)},
+        )
     q.append(now)

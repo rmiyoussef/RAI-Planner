@@ -161,7 +161,7 @@ export function Home() {
 
   if (loading) {
     return (
-      <div className="w-full space-y-6 p-4 sm:p-6 lg:p-8">
+      <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-3">
             <div className="h-8 w-56 animate-pulse rounded-lg bg-muted" />
@@ -209,7 +209,7 @@ export function Home() {
   const tasksByPriority = (data.tasks_by_priority ?? {}) as Record<string, number>
 
   return (
-    <div className="w-full space-y-6 p-4 sm:p-6 lg:p-8 animate-in motion-reduce:animate-none">
+    <div className="flex flex-col gap-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1.5">
@@ -236,7 +236,7 @@ export function Home() {
               id="granularity"
               value={gran}
               onChange={(e) => setGran(e.target.value as Granularity)}
-              className="h-10 cursor-pointer appearance-none rounded-xl border border-border bg-card py-2 pl-9 pr-9 text-sm font-medium text-foreground shadow-sm transition-colors hover:border-primary/30 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="h-10 cursor-pointer appearance-none rounded-xl border border-border bg-card py-2 pl-9 pr-9 text-sm font-medium text-foreground shadow-sm transition-colors hover:border-border focus:border-border focus:outline-none focus:ring-0 focus-visible:border-border focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
             >
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
@@ -260,7 +260,7 @@ export function Home() {
             label="Total Projects"
             value={data.projects_total ?? 0}
             sublabel="Portfolio"
-            iconWrapClass="bg-primary-light text-primary border-primary/10"
+            iconWrapClass="bg-primary-light text-primary border-primary/10 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-900/50"
           />
           <StatCard
             icon={CheckCircle2}
@@ -290,7 +290,7 @@ export function Home() {
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-2" aria-label="Tasks breakdown">
         <div className="card">
           <div className="mb-4 flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-light text-primary" aria-hidden="true">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-light text-primary dark:bg-blue-950/50 dark:text-blue-300" aria-hidden="true">
               <Layers className="h-4 w-4" />
             </div>
             <h3 className="text-sm font-semibold tracking-tight text-foreground">Tasks by Status</h3>

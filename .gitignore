@@ -14,3 +14,4 @@ logs/
 .memory_db.json
 .memory_db.json.tmp
 backend/.memory_db.json
+pgdata/

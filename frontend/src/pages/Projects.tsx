@@ -79,7 +79,7 @@ export function Projects() {
   }
 
   return (
-    <div className="w-full space-y-6 p-4 sm:p-6 lg:p-8 animate-in motion-reduce:animate-none">
+    <div className="flex flex-col gap-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1.5">
@@ -154,7 +154,7 @@ export function Projects() {
               id="project-status-filter"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
-              className="h-[42px] cursor-pointer appearance-none rounded-xl border border-border bg-card py-2 pl-3.5 pr-9 text-sm font-medium text-foreground shadow-sm transition-colors hover:border-primary/30 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="h-[42px] cursor-pointer appearance-none rounded-xl border border-border bg-card py-2 pl-3.5 pr-9 text-sm font-medium text-foreground shadow-sm transition-colors hover:border-border focus:border-border focus:outline-none focus:ring-0 focus-visible:border-border focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
             >
               <option value="">All statuses</option>
               <option value="active">Active</option>
@@ -188,7 +188,7 @@ export function Projects() {
         >
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-light text-primary border border-primary/10">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-light text-primary border border-primary/10 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
                 <Plus className="h-5 w-5" aria-hidden="true" />
               </div>
               <div>
@@ -384,7 +384,7 @@ export function Projects() {
                       </span>
                     </td>
                     <td className="text-center">
-                      <span className="inline-flex min-w-7 justify-center rounded-full bg-primary-light px-2 py-1 text-xs font-bold tabular-nums text-primary border border-primary/10">
+                      <span className="inline-flex min-w-7 justify-center rounded-full bg-primary-light px-2 py-1 text-xs font-bold tabular-nums text-primary border border-primary/10 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
                         {p.task_count ?? 0}
                       </span>
                     </td>

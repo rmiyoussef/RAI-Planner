@@ -9,9 +9,11 @@
       (function(){
         try{
           var t = localStorage.getItem('rai-theme');
-          if(t==='dark') document.documentElement.classList.add('dark');
-          else if(!t) document.documentElement.classList.remove('dark');
-          else if(t==='light') document.documentElement.classList.remove('dark');
+          var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var theme = t === 'dark' || t === 'light' ? t : (prefersDark ? 'dark' : 'light');
+          if(theme==='dark') document.documentElement.classList.add('dark');
+          else document.documentElement.classList.remove('dark');
+          document.documentElement.style.colorScheme = theme;
         }catch(e){}
       })();
     </script>

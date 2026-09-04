@@ -8,24 +8,27 @@ export default {
   theme: {
     extend: {
       colors: {
+        border: 'hsl(var(--border))',
+        background: 'hsl(var(--background))',
+        foreground: 'hsl(var(--foreground))',
+        card: {
+          DEFAULT: 'hsl(var(--card))',
+          foreground: 'hsl(var(--card-foreground))',
+        },
+        muted: {
+          DEFAULT: 'hsl(var(--muted))',
+          foreground: 'hsl(var(--muted-foreground))',
+        },
         primary: {
           DEFAULT: '#2563EB',
           hover: '#1D4ED8',
-          light: '#EFF6FF',
+          light: 'hsl(var(--primary-light))',
         },
         secondary: '#3B82F6',
         accent: {
           DEFAULT: '#EA580C',
           hover: '#C2410C',
         },
-        background: '#F8FAFC',
-        foreground: '#1E293B',
-        card: '#FFFFFF',
-        muted: {
-          DEFAULT: '#E9EFF8',
-          foreground: '#475569',
-        },
-        border: '#E2E8F0',
         destructive: '#DC2626',
         ring: '#2563EB',
       },

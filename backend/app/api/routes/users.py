@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from typing import Optional
 from app.schemas.user import InternalUserCreate, InternalUserUpdate, InternalUserResponse, UserListResponse
 from app.core.database import get_collection, new_id, utc_now
 from app.api.deps import get_current_owner
+from app.core.ratelimit import rate_limit
 import re
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -46,7 +47,8 @@ async def list_users(search: Optional[str] = Query(None), owner=Depends(get_curr
     return UserListResponse(items=[doc_to_resp(d) for d in items_raw], total=len(items_raw))
 
 @router.post("", response_model=InternalUserResponse)
-async def create_user(payload: InternalUserCreate, owner=Depends(get_current_owner)):
+async def create_user(payload: InternalUserCreate, request: Request, owner=Depends(get_current_owner)):
+    rate_limit(request, "create_user", limit=30, window_seconds=60)
     if not validate_github_url(payload.github_url):
         raise HTTPException(status_code=400, detail="Invalid GitHub URL format. Expected https://github.com/username")
     username = extract_username(payload.github_url)

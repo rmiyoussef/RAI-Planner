@@ -1,229 +1,193 @@
 # RAI Planner — Smart Engineering Agent Platform
 
-![Version](https://img.shields.io/badge/version-v0.1.7-blue) ![License](https://img.shields.io/badge/license-MIT-green)
+![Version](https://img.shields.io/badge/version-v0.1.22-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Stack](https://img.shields.io/badge/stack-PostgreSQL%20%7C%20FastAPI%20%7C%20React-blue)
 
-A modern project/task management app with an **AI-powered Smart Engineering Agent** that understands your repository + `.brain/` context to generate high-quality engineering tasks.
+A modern project/task management app with a **Plane/Linear-style issue tracker** and an **AI-powered Smart Engineering Agent** that understands your repository + `.brain/` context to generate high-quality engineering tasks.
+
+## ✨ Highlights (v0.1.22)
+
+- **Task Tracker:** Saved view tabs, simple filters (project/assignee/status/date/title), status grouping (Planning collapsed/expanded), inline edits, sticky columns, pagination (50/page, 1000+ tasks), status chart (Planning/Testing/Done/On Hold + Opened/Closed)
+- **Company Branding:** First-time-only signup with company name/logo, random icon fallback, editable in Settings → Company, shown in sidebar top-left (no background on logo)
+- **Project Brain:** Folder file-manager (expandable folders, file click → formatted markdown modal `95vw/7xl`, `90vh`)
+- **Auth:** Single-owner first-time signup, JWT, bcrypt, rate-limit (`429` with `Retry-After`), `VITE_APP_NAME` from `.env`
+- **Database:** **PostgreSQL** (`asyncpg`, `JSONB` tables, `pgdata` persistent, `docker-compose` postgres:16) — replaces MongoDB, automatic migration from legacy `in-memory`
+- **Security:** `X-Content-Type-Options`, `CSP`, `HSTS`, `CORS` hardened, `ALLOWED` validation, path traversal guard, `Fernet` encryption for `ai_configs` + `company_settings` at rest
+- **UI:** `#404040` sidebar, border-only selection, centered login, `Workspace` label, `h-[calc(100dvh-120px)]` no page scroll — only tasks scroll, hot-reload (`vite` watches `backend/app`, `uvicorn --reload`)
 
 ## Prerequisites
 
 | Tool | Version | Check |
 |---|---|---|
 | Python | 3.10+ | `python3 --version` |
-| Node.js | 18+ (with npm) | `node --version` |
-| Docker (optional) | any recent | `docker --version` |
+| Node.js | 18+ | `node --version` |
+| PostgreSQL | 16+ or Docker | `psql --version` or `docker --version` |
+| Docker (optional) | any | `docker --version` |
 
-## Quick Start
-
-**One-line install (Linux/macOS):**
+## Quick Start (one command)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/rmiyoussef/RAI-Planner/main/install.sh | bash
+# or
+git clone https://github.com/rmiyoussef/RAI-Planner.git && cd RAI-Planner && ./install.sh
 ```
 
-The installer clones the repo (if needed), creates `.env` with a generated `JWT_SECRET`, installs backend + frontend dependencies, and builds the frontend.
+`install.sh` will: clone if needed, create/patch `.env` from `.env.example` (all 13 keys), ensure `frontend/.env` has `VITE_*`, start `pgdata` if needed, create `backend/.venv`, `pip install`, `npm install`, `npm run build`.
 
-**Then run everything with one command:**
+Then:
 
 ```bash
-cd RAI-Planner
-./start.sh    # backend on :8000, frontend on :5173 — Ctrl+C stops both
+./start.sh    # postgres (if pgdata) + backend :8000 --reload + frontend :5173 HMR — Ctrl+C stops both
+# open http://localhost:5173  (API docs http://localhost:8000/docs)
+# or production: http://plan.squadifyai.com (nginx → dist + /api proxy)
 ```
 
-Open **http://localhost:5173** (API docs: http://localhost:8000/docs).
+> **Database:** `POSTGRES_URI=postgresql://rami@127.0.0.1:5433/rai_planner` (local `pgdata` at `127.0.0.1:5433`, Docker `postgres:5432`). Tables `owners, company_settings, projects, tasks, task_versions, task_activities, users, ai_configs, agent_skills` are `JSONB` (`id TEXT PK, data JSONB`), created on `init_db()` and migrated from legacy `.memory_db.json` if empty.
 
-> **Database:** works out of the box — with `MONGODB_URI` empty the backend uses a built-in in-memory database (data resets on restart). Set `MONGODB_URI` in `.env` for persistent data.
-
-### Manual setup (if you prefer)
+### Manual
 
 ```bash
-git clone https://github.com/rmiyoussef/RAI-Planner.git
-cd RAI-Planner
-./install.sh
-```
-
-Or by hand:
-
-```bash
-# Backend (from repo root)
-cd backend
-python3 -m venv .venv && source .venv/bin/activate
+# Backend
+cd backend && python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000     # reads .env from backend/ or repo root
+uvicorn app.main:app --reload --port 8000  # reads .env from backend/ or root
 
-# Frontend (second terminal, from repo root)
-cd frontend
-npm install
-npm run dev                                   # http://localhost:5173
+# Frontend (second terminal)
+cd frontend && npm install && npm run dev  # http://localhost:5173
+# build for nginx
+npm run build  # → frontend/dist
 ```
 
 ## Environment Variables
 
-Create `.env` from `.env.example` (the installer does this for you):
+All **must** come from `.env` — no hard-coded secrets (`backend/app/core/config.py` has no defaults for secrets).
 
 ```ini
-MONGODB_URI=mongodb+srv://...    # optional — empty = in-memory dev database
+# .env (from .env.example — installer patches missing keys)
+MONGODB_URI=                     # legacy, not used (kept for compat)
 MONGODB_DATABASE=rai_planner
-JWT_SECRET=auto-generated-by-installer
-CORS_ORIGINS=http://localhost:5173,http://localhost:3000
-VITE_API_URL=/api                # relative — works with dev proxy & reverse proxies
-#PROJECTS_ROOT=/srv/projects     # sandbox: project paths must live inside (recommended in prod)
-#ALLOW_SIGNUP=false              # disable public registration after your account exists
+POSTGRES_URI=postgresql://rami@127.0.0.1:5433/rai_planner
+POSTGRES_DATABASE=rai_planner
+JWT_SECRET=auto-generated-by-installer  # required
+JWT_ALGORITHM=HS256
+JWT_EXPIRE_MINUTES=10080
+CORS_ORIGINS=http://localhost:5173,http://localhost:3000,http://plan.squadifyai.com,http://192.168.8.100
+API_PREFIX=/api
+PROJECT_NAME=RAI Planner
+MAX_FILE_SIZE_BYTES=1048576
+MAX_CONTEXT_BYTES=200000
+ENCRYPTION_KEY=optional-separate-encryption-key  # if empty derives from JWT_SECRET
+PROJECTS_ROOT=                # sandbox: project_path must be inside (recommended prod)
+ALLOW_SIGNUP=true             # first-time only; set false after first account
+VITE_API_URL=/api             # baked at build, no fallback
+VITE_APP_NAME=RAI Planner     # used in sidebar/footer, no hard-coded fallback
 ```
 
-The backend reads `.env` from `backend/` or the repo root (both are checked).
-`VITE_API_URL` is baked at build time; leave it as `/api` unless the browser must reach the backend on another origin.
+`frontend/.env` must contain `VITE_API_URL` and `VITE_APP_NAME` (installer copies from root `.env`).
 
-AI provider config is stored **in-app** via Settings → AI Configuration (encrypted at rest).
-
-## Docker (optional)
+## Docker
 
 ```bash
 docker-compose up --build
+# postgres:16 (5433:5432, volume postgres_data) + backend :8000 + frontend :5173
+# VITE_API_URL=http://localhost:8000/api for browser, POSTGRES_URI=postgresql://rami@postgres:5432/rai_planner inside
 ```
 
-Starts the FastAPI backend (`:8000`) and the Vite dev server (`:5173`) with the API URL wired for the browser.
-
-## Production behind nginx (optional)
-
-Vhost template + idempotent setup script live in `deploy/`:
+## Production behind nginx
 
 ```bash
-# 1. Build the frontend
-cd frontend && npm run build
-
-# 2. Point your domain (or /etc/hosts) at this machine
-# 3. Review deploy/plan.squadifyai.com.conf (server_name + paths), then:
-sudo bash deploy/setup-nginx.sh
+cd frontend && npm run build  # → dist
+sudo bash deploy/setup-nginx.sh  # vhost plan.squadifyai.com.conf → /etc/nginx/... + reload
+# serves dist with SPA fallback, proxies /api/ to 127.0.0.1:8000, gzip, 25M body
 ```
 
-The vhost serves `frontend/dist` with SPA fallback and proxies `/api/` to the backend on `:8000`.
+`deploy/plan.squadifyai.com.conf` + `deploy/setup-nginx.sh` are idempotent.
 
 ## Updating
 
 ```bash
-./update.sh        # version-aware: pulls, reinstalls deps, rebuilds frontend
-```
-
-One-liner from any RAI-Planner clone:
-```bash
+./update.sh        # version-aware: fetches origin/main, compares VERSION, stashes, pulls, patches .env, reinstalls, rebuilds, ensures pgdata
+# or one-liner
 curl -fsSL https://raw.githubusercontent.com/rmiyoussef/RAI-Planner/main/update.sh | bash
 ```
 
+`install.sh` and `update.sh` now patch missing `.env` keys without overwriting, ensure `frontend/.env` has `VITE_*`, and auto-start `pgdata` if present.
+
 ## Versioning
 
-- The version lives in `VERSION` at the repo root and matching `v*` git tags.
-- Every push to `main`/`staging` auto-bumps the **patch** version via GitHub Actions (`.github/workflows/version-bump.yml`).
-- Manual minor/major bumps:
-  ```bash
-  ./scripts/bump-version.sh minor   # 0.1.6 → 0.2.0
-  ./scripts/bump-version.sh major   # 0.2.0 → 1.0.0
-  git commit -am "chore: bump version" && git tag v0.2.0 && git push --follow-tags
-  ```
+`VERSION` at root + `v*` tags. Push to `main`/`staging` auto-bumps patch via `.github/workflows/version-bump.yml`.
 
-Check where you are anytime:
 ```bash
 cat VERSION
-git tag --sort=-v:refname | head -n 5
-./update.sh    # tells you if you're behind
+./scripts/bump-version.sh minor  # 0.1.22 → 0.2.0
+git commit -am "chore: bump" && git tag v0.2.0 && git push --follow-tags
 ```
 
 ## Tests
 
 ```bash
-# Backend
-cd backend && source .venv/bin/activate && pytest -v
-
-# Frontend
-cd frontend && npm test
+cd backend && source .venv/bin/activate && pytest -v  # 8 core + 10 security = 18
+# security: unauth 401, IDOR 404, rate-limit 429+Retry-After, path traversal 400, SQLi whitelist, encryption at rest, XSS JSON, CORS headers, first-time-only, logo size
+cd frontend && npm test  # vitest
 ```
 
 ## Scripts
 
 | Script | Purpose |
 |---|---|
-| `install.sh` | Full setup: deps, `.env`, venv, frontend build |
-| `start.sh` | Run backend + frontend with one command |
-| `update.sh` | Version-aware self-update |
+| `install.sh` | Full setup: `.env`, `pgdata` check, venv, npm, build |
+| `start.sh` | Dev launcher: postgres (if pgdata) + backend `--reload` + frontend HMR (backend file change → full-reload) |
+| `update.sh` | Version-aware pull + `.env` patch + reinstall + build |
 | `scripts/bump-version.sh` | Manual version bumps |
-| `deploy/setup-nginx.sh` | Install the nginx vhost (sudo) |
+| `deploy/setup-nginx.sh` | Nginx vhost install |
 
 ## Tech Stack
 
-- **Frontend:** React + TypeScript + Vite, React Router, light/dark theme
-- **Backend:** Python + FastAPI + Pydantic (async), modular agents & services
-- **Database:** MongoDB Atlas (Motor async) with in-memory fallback for dev/tests
-- **AI Agent:** Python modular agent (`agents/`), OpenAI-compatible provider, background worker lifecycle
+- **Frontend:** React 18 + TypeScript + Vite 5, React Router 6, Tailwind 3, `lucide-react`, `Vite` HMR, `vitest`
+- **Backend:** Python 3.13 + FastAPI + Pydantic, `asyncpg` + `PostgreSQL 16` (`JSONB`), `bcrypt`, `python-jose`, `cryptography` (Fernet), `httpx`
+- **Database:** PostgreSQL `pgdata` (persistent, `JSONB` tables, `asyncpg` pool, `ALLOWED_COLLECTIONS` whitelist, quoted identifiers, parameterized `data::jsonb`) — replaces MongoDB (`motor` removed)
+- **AI Agent:** `agents/` (smart_engineering_agent, brain_reader, prompt_manager, skill_manager, ai_provider), OpenAI-compatible, `MAX_CONTEXT_BYTES` limits
 
-## API
+## API (prefix `/api`)
 
-Prefix `/api`:
+- `GET /auth/signup-status` (public), `POST /auth/signup` (first-time-only, company create), `POST /auth/login` (rate-limit 10/min, `Retry-After`), `GET /auth/me`, `PUT /auth/profile`, `POST /auth/change-password`
+- `GET /settings/company` / `PUT` (encrypted), `GET /settings/company/public` (public), `GET/PUT /settings/ai-config` (encrypted `provider_url/model_name/api_key`), `GET /settings/agent`, `PUT /settings/agent/prompt`, `POST /settings/agent/restart`, `GET/POST/PUT/DELETE /settings/skills`
+- `GET/POST /projects`, `GET/PUT /projects/{id}`, `POST /projects/{id}/disable`, `GET /projects/{id}/brain`, `GET /projects/{id}/brain/file?path=`
+- `GET/POST /tasks` (paginated `?page&limit` 100 max, filter `project_id/status/priority/assigned_to/search`), `GET/PATCH /tasks/{id}`, `GET /tasks/{id}/versions|activities`, `POST /tasks/{id}/generate`
+- `GET/POST /users`, `GET/PUT/DELETE /users/{id}`
+- `GET /dashboard?granularity=daily|weekly|monthly`
+- `GET /health`, `GET /api/health`
 
-- `/auth` — signup, login, me, profile, change-password
-- `/projects` — CRUD, disable, brain
-- `/tasks` — CRUD, versions, activities, generate
-- `/users` — internal users
-- `/dashboard` — metrics + date aggregation (daily/weekly/monthly)
-- `/settings` — ai-config, agent, skills
-- `/agent` — status, runs, lifecycle
-
-Interactive docs at **`/docs`** (Swagger) and **`/redoc`**.
-
-## AI Agent Workflow
-
-`Generate task With AI` → validate project → inspect `.brain/` → build context (respecting limits, ignoring `.git`, `node_modules`, `.env`, etc.) → load provider/model/prompt/skills → call provider (or mock) → save Markdown version + activity → mark `ai_generated`.
+Docs at `/docs` (Swagger) with `CSP` allowing `cdn.jsdelivr.net`.
 
 ## Key Product Invariants
 
-- Every task MUST belong to a project (`project_id` validated server-side)
-- Projects are **disabled, not deleted**
-- Internal users cannot log in (no credentials)
-- Only the latest task version is editable; history is immutable
-- Descriptions are Markdown with preview/copy/download
-- Successful AI generation creates version + activity; the button is then disabled
-- API keys masked (`••••abcd`), encrypted at rest, never logged
-- Filesystem access sandboxed to `project_path`; secrets/binary/huge files ignored
-
-## Security Notes
-
-- Passwords hashed with bcrypt (72-byte truncation)
-- JWT auth (HS256, algorithm pinned), protected routes
-- Rate limiting on login/signup (10 req/min/IP) + `ALLOW_SIGNUP` kill-switch
-- Optional `PROJECTS_ROOT` filesystem sandbox — enforced on project create, update, **and every agent/brain read**
-- API keys encrypted at rest with Fernet (AES + HMAC), masked (`••••abcd`), never logged
-- Mongo-safe queries, Pydantic validation
-- Path traversal prevention, symlink handling, secret filtering (`.env*`, `.pem`, `.key`, binaries)
-- Cortex-safe Markdown rendering (escaped HTML)
-
-See [SECURITY.md](SECURITY.md) for the full policy, hardening checklist for public deployments, and how to report vulnerabilities.
-
-## .brain Context
-
-The agent prioritizes a project's `.brain/` directory if present; otherwise the project page prompts you to install the AI tool on that project. The context builder respects `MAX_FILE_SIZE` and `MAX_CONTEXT_BYTES`, and ignores sensitive/binary/cache directories.
+- **Single owner:** `POST /auth/signup` only when `owners.count==0` (first-time), `GET /auth/signup-status` drives login/signup UI
+- **Company branding:** `company_settings` per `owner_id`, logo ≤1 MB (frontend + backend check), random icon fallback, sidebar top-left `bg-[#404040]` border-only selection, `Workspace` label, no logo background
+- **Task tracker:** `SimpleFilterBar` (project/assignee/status/date/title) + `StatusChart` (Planning/Testing/Done/On Hold + Opened/Closed) + `GroupedTable` (collapsible `Planning` expanded, sticky `# + Title` 52+308px, pagination 20/50/100, `h-[calc(100dvh-125px)]` only tasks scroll)
+- **Project Brain:** `.brain` folder file-manager (expandable folders, `max-h-[65vh]` → page `h-[calc(100dvh-120px)]` no page scroll, `95vw/7xl` modal formatted markdown)
+- **Security:** `X-Content-Type-Options`, `CSP`, `HSTS`, `X-Frame-Options`, `Cache-Control:no-store` for `/api`, `ALLOWED_COLLECTIONS` whitelist, `read_brain_file` traversal guard, `Fernet` at rest for `ai_configs` + `company_settings`, `bcrypt` 72B, `JWT HS256` pinned, `rate_limit` on `login/signup/create_*` with `Retry-After`
 
 ## Project Structure
 
 ```
 RAI-Planner/
 ├── backend/app/
-│   ├── api/routes/
-│   ├── core/            # config, security, database
-│   ├── agents/          # smart_engineering_agent, brain_reader, prompt_manager, skill_manager, ai_provider
-│   ├── services/        # filesystem sandbox
-│   └── main.py
+│   ├── api/routes/ (auth, projects, tasks, users, dashboard, settings, agent)
+│   ├── core/ (config [POSTGRES_URI], security [Fernet], database [asyncpg JSONB], ratelimit)
+│   ├── agents/ (smart_engineering_agent, prompt_manager, skill_manager)
+│   ├── services/filesystem.py (brain_status, read_brain_file, PROJECTS_ROOT sandbox)
+│   └── main.py (security headers, CORS hardened, lifespan init_db)
 ├── frontend/src/
-│   ├── pages/           # Home, Projects, ProjectDetail, Tasks, Users, Settings, Login/Signup
-│   ├── components/      # Layout, Markdown
-│   ├── store/           # AuthContext
-│   └── api/client.ts
-├── deploy/              # nginx vhost template + setup script
-├── scripts/             # install/update/bump wrappers
-├── install.sh           # one-line setup
-├── start.sh             # one-command dev launcher
-├── update.sh            # version-aware updater
-├── docker-compose.yml
-└── .env.example
+│   ├── pages/ (Home, Projects, ProjectDetail [folder tree, 95vw modal, h-[calc] no scroll], Tasks [simple filters, chart, pagination], Users, Settings [Company/AI smart inputs, no card, full width], Login centered, Signup centered)
+│   ├── components/tasks/ (TaskListView, SimpleFilterBar, StatusChart, GroupedTable, Pagination, SavedViewTabs, etc.)
+│   ├── components/Layout.tsx (#404040 sidebar, border-only active, Workspace label)
+│   └── api/client.ts (ApiError with status/headers, VITE_API_URL required)
+├── pgdata/ (PostgreSQL data, gitignored, auto-started by start.sh)
+├── deploy/plan.squadifyai.com.conf
+├── install.sh / start.sh (hot-reload: vite watches backend/app, uvicorn --reload) / update.sh
+└── .env / .env.example (all 13 keys, no hard-coded fallbacks)
 ```
 
 ---
 
-Built as a production-quality monorepo per spec phases 1-11.
+Built as production-quality monorepo — `VITE_*` baked at build, `POSTGRES_URI` required, `pgdata` persistent, `handle all tables` via `JSONB`.

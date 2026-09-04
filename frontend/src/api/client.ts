@@ -1,7 +1,21 @@
-const API_BASE = (import.meta as any).env?.VITE_API_URL || '/api'
+const API_BASE = import.meta.env.VITE_API_URL as string
+if (!API_BASE) throw new Error("VITE_API_URL is not set in .env — no hard-coded fallback")
 
 function getToken() {
   return localStorage.getItem('rai_token')
+}
+
+export class ApiError extends Error {
+  status: number
+  headers: Headers
+  detail: string
+  constructor(message: string, status: number, headers: Headers, detail?: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.headers = headers
+    this.detail = detail || message
+  }
 }
 
 export async function apiFetch(path: string, options: RequestInit = {}) {
@@ -17,7 +31,8 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
   try { data = text ? JSON.parse(text) : null } catch { data = text }
   if (!res.ok) {
     const msg = data?.detail || data?.message || `Request failed ${res.status}`
-    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg))
+    const detail = typeof msg === 'string' ? msg : JSON.stringify(msg)
+    throw new ApiError(detail, res.status, res.headers, detail)
   }
   return data
 }
@@ -26,5 +41,6 @@ export const api = {
   get: (p: string) => apiFetch(p),
   post: (p: string, body: any) => apiFetch(p, { method: 'POST', body: JSON.stringify(body) }),
   put: (p: string, body: any) => apiFetch(p, { method: 'PUT', body: JSON.stringify(body) }),
+  patch: (p: string, body: any) => apiFetch(p, { method: 'PATCH', body: JSON.stringify(body) }),
   delete: (p: string) => apiFetch(p, { method: 'DELETE' }),
 }

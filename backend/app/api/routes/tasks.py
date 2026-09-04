@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request
 from typing import Optional, List
 from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskListResponse, TaskVersionResponse, TaskActivityResponse
 from app.core.database import get_collection, new_id, utc_now
 from app.api.deps import get_current_owner
 from app.agents.smart_engineering_agent import agent
+from app.core.ratelimit import rate_limit
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -31,6 +32,7 @@ async def enrich_task(doc, owner_id: str):
         assigned_to=doc.get("assigned_to"),
         assigned_user_name=assigned_name,
         tags=doc.get("tags",[]),
+        task_type=doc.get("task_type", "task"),
         ai_generated=doc.get("ai_generated", False),
         version=doc.get("version",1),
         created_at=doc["created_at"],
@@ -74,7 +76,8 @@ async def list_tasks(
     return TaskListResponse(items=enriched, total=total)
 
 @router.post("", response_model=TaskResponse)
-async def create_task(payload: TaskCreate, owner=Depends(get_current_owner)):
+async def create_task(payload: TaskCreate, request: Request, owner=Depends(get_current_owner)):
+    rate_limit(request, "create_task", limit=60, window_seconds=60)
     # validate project exists and belongs to owner
     proj = await get_collection("projects").find_one({"_id": payload.project_id, "owner_id": owner["_id"]})
     if not proj:
@@ -94,6 +97,7 @@ async def create_task(payload: TaskCreate, owner=Depends(get_current_owner)):
         "status": payload.status,
         "assigned_to": payload.assigned_to,
         "tags": payload.tags,
+        "task_type": payload.task_type,
         "ai_generated": False,
         "version": 1,
         "created_at": utc_now(),
@@ -112,6 +116,7 @@ async def create_task(payload: TaskCreate, owner=Depends(get_current_owner)):
         "status": doc["status"],
         "assigned_to": doc["assigned_to"],
         "tags": doc["tags"],
+        "task_type": doc["task_type"],
         "created_at": utc_now(),
     })
     await get_collection("task_activities").insert_one({
@@ -133,26 +138,37 @@ async def get_task(task_id: str, owner=Depends(get_current_owner)):
         raise HTTPException(status_code=404, detail="Task not found")
     return await enrich_task(doc, owner["_id"])
 
-@router.put("/{task_id}", response_model=TaskResponse)
-async def update_task(task_id: str, payload: TaskUpdate, owner=Depends(get_current_owner)):
+async def _perform_task_update(task_id: str, payload: TaskUpdate, owner) -> TaskResponse:
     col = get_collection("tasks")
     doc = await col.find_one({"_id": task_id, "owner_id": owner["_id"]})
     if not doc:
         raise HTTPException(status_code=404, detail="Task not found")
-    # capture changes
+    # Determine which fields were explicitly provided (supports clearing assigned_to with null)
+    provided = payload.model_fields_set if hasattr(payload, "model_fields_set") else {k for k in ["title","description","priority","status","assigned_to","tags","task_type"] if getattr(payload, k) is not None}
+    # validate assigned_to when explicitly provided and non-null
+    if "assigned_to" in provided and payload.assigned_to is not None and payload.assigned_to != "":
+        u = await get_collection("users").find_one({"_id": payload.assigned_to, "owner_id": owner["_id"]})
+        if not u:
+            raise HTTPException(status_code=400, detail="Assigned user not found")
+    # capture changes — only for fields that were provided
     changes = []
-    updates = {}
-    for field in ["title","description","priority","status","assigned_to","tags"]:
+    updates: dict = {}
+    for field in ["title","description","priority","status","assigned_to","tags","task_type"]:
+        if field not in provided:
+            continue
         new_val = getattr(payload, field)
-        if new_val is not None:
-            old_val = doc.get(field)
-            if old_val != new_val:
-                changes.append({"field": field, "old_value": old_val, "new_value": new_val})
-                updates[field] = new_val
-    if not updates:
+        # normalize empty string for assigned_to as None (clear)
+        if field == "assigned_to" and new_val == "":
+            new_val = None
+        old_val = doc.get(field)
+        # normalize both sides for comparison (None vs missing)
+        if old_val != new_val:
+            changes.append({"field": field, "old_value": old_val, "new_value": new_val})
+            updates[field] = new_val
+    if not changes:
         return await enrich_task(doc, owner["_id"])
     # version bump if content fields changed
-    content_fields = {"title","description","priority","status","assigned_to","tags"}
+    content_fields = {"title","description","priority","status","assigned_to","tags","task_type"}
     bump = any(c["field"] in content_fields for c in changes)
     new_version = doc.get("version",1) + (1 if bump else 0)
     if bump:
@@ -172,10 +188,11 @@ async def update_task(task_id: str, payload: TaskUpdate, owner=Depends(get_curre
             "status": updates.get("status", doc["status"]),
             "assigned_to": updates.get("assigned_to", doc.get("assigned_to")),
             "tags": updates.get("tags", doc["tags"]),
+            "task_type": updates.get("task_type", doc.get("task_type", "task")),
             "created_at": utc_now(),
         })
     # activity
-    action_map = {"title":"title_changed","description":"description_changed","priority":"priority_changed","status":"status_changed","assigned_to":"assigned_user_changed","tags":"tags_changed"}
+    action_map = {"title":"title_changed","description":"description_changed","priority":"priority_changed","status":"status_changed","assigned_to":"assigned_user_changed","tags":"tags_changed","task_type":"task_type_changed"}
     action = "task_updated"
     if len(changes)==1:
         action = action_map.get(changes[0]["field"], "task_updated")
@@ -191,6 +208,16 @@ async def update_task(task_id: str, payload: TaskUpdate, owner=Depends(get_curre
     })
     updated = await col.find_one({"_id": task_id})
     return await enrich_task(updated, owner["_id"])
+
+
+@router.put("/{task_id}", response_model=TaskResponse)
+async def update_task(task_id: str, payload: TaskUpdate, owner=Depends(get_current_owner)):
+    return await _perform_task_update(task_id, payload, owner)
+
+
+@router.patch("/{task_id}", response_model=TaskResponse)
+async def patch_task(task_id: str, payload: TaskUpdate, owner=Depends(get_current_owner)):
+    return await _perform_task_update(task_id, payload, owner)
 
 @router.delete("/{task_id}")
 async def delete_task(task_id: str, owner=Depends(get_current_owner)):
@@ -218,7 +245,7 @@ async def list_versions(task_id: str, owner=Depends(get_current_owner)):
     items.sort(key=lambda x: x.get("version",0))
     return [TaskVersionResponse(
         id=d["_id"], task_id=d["task_id"], version=d["version"], title=d["title"], description=d["description"],
-        priority=d["priority"], status=d["status"], assigned_to=d.get("assigned_to"), tags=d.get("tags",[]), created_at=d["created_at"]
+        priority=d["priority"], status=d["status"], assigned_to=d.get("assigned_to"), tags=d.get("tags",[]), task_type=d.get("task_type","task"), created_at=d["created_at"]
     ) for d in items]
 
 @router.get("/{task_id}/activities", response_model=List[TaskActivityResponse])

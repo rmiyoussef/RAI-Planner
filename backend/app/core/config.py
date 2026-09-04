@@ -3,16 +3,20 @@ from functools import lru_cache
 from typing import List
 
 class Settings(BaseSettings):
+    # All values must come from .env — no hard-coded secrets
+    POSTGRES_URI: str  # e.g. postgresql://user:pass@host:5433/db
+    POSTGRES_DATABASE: str
+    # Kept for backwards compat — not used (MongoDB removed)
     MONGODB_URI: str = ""
     MONGODB_DATABASE: str = "rai_planner"
-    JWT_SECRET: str = "change-me-in-production-please-use-long-random"
-    JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRE_MINUTES: int = 60 * 24 * 7
-    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
-    API_PREFIX: str = "/api"
-    PROJECT_NAME: str = "RAI Planner"
-    MAX_FILE_SIZE_BYTES: int = 1024 * 1024  # 1MB per file
-    MAX_CONTEXT_BYTES: int = 200_000
+    JWT_SECRET: str  # must be set in .env, no default
+    JWT_ALGORITHM: str
+    JWT_EXPIRE_MINUTES: int
+    CORS_ORIGINS: str
+    API_PREFIX: str
+    PROJECT_NAME: str
+    MAX_FILE_SIZE_BYTES: int
+    MAX_CONTEXT_BYTES: int
     ENCRYPTION_KEY: str = ""  # if empty, will derive from JWT_SECRET
     # Security hardening (recommended in production — see SECURITY.md)
     # If set, project_path must resolve inside this directory (filesystem sandbox)

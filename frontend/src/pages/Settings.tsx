@@ -32,9 +32,12 @@ import {
   ToggleLeft,
   ToggleRight,
   Hash,
+  Building2,
+  Image as ImageIcon,
+  Upload,
 } from 'lucide-react'
 
-type Tab = 'profile' | 'ai' | 'agent'
+type Tab = 'profile' | 'company' | 'ai' | 'agent'
 
 export function Settings() {
   const { owner, refresh } = useAuth()
@@ -47,6 +50,8 @@ export function Settings() {
   const [systemPrompt, setSystemPrompt] = useState('')
   const [skills, setSkills] = useState<any[]>([])
   const [skillForm, setSkillForm] = useState({ name: '', description: '', instructions: '', enabled: true })
+  const [company, setCompany] = useState<{ company_name: string; company_logo: string | null }>({ company_name: '', company_logo: null })
+  const [companyPreview, setCompanyPreview] = useState<string | null>(null)
   const [msg, setMsg] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -81,10 +86,48 @@ export function Settings() {
     }
   }
 
+  async function loadCompany() {
+    try {
+      const data = await api.get('/settings/company')
+      setCompany({ company_name: data.company_name || '', company_logo: data.company_logo || null })
+      setCompanyPreview(data.company_logo || null)
+    } catch (e: any) {
+      setError(e.message)
+    }
+  }
+
+  function onCompanyLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 1024 * 1024) { setError('Logo must be under 1MB'); return }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = reader.result as string
+      setCompany((c) => ({ ...c, company_logo: dataUrl }))
+      setCompanyPreview(dataUrl)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  async function saveCompany() {
+    if (!company.company_name.trim()) { setError('Company name is required'); return }
+    setSaving(true)
+    try {
+      const data = await api.put('/settings/company', { company_name: company.company_name.trim(), company_logo: company.company_logo || '' })
+      setCompany({ company_name: data.company_name, company_logo: data.company_logo })
+      setCompanyPreview(data.company_logo)
+      flashSuccess('Company branding updated')
+      // notify layout to refresh — via storage event
+      try { localStorage.setItem('rai_company_updated', Date.now().toString()) } catch {}
+      window.dispatchEvent(new Event('rai_company_updated'))
+    } catch (e: any) { flashError(e) } finally { setSaving(false) }
+  }
+
   useEffect(() => {
     loadAI()
     loadAgent()
     loadSkills()
+    loadCompany()
   }, [])
   useEffect(() => {
     if (owner) setProfile({ full_name: owner.full_name, email: owner.email })
@@ -238,12 +281,13 @@ export function Settings() {
 
   const tabs: { id: Tab; label: string; icon: any; desc: string }[] = [
     { id: 'profile', label: 'Profile', icon: User, desc: 'Account & security' },
+    { id: 'company', label: 'Company', icon: Building2, desc: 'Branding & logo' },
     { id: 'ai', label: 'AI Configuration', icon: Cpu, desc: 'Model & provider' },
     { id: 'agent', label: 'Agent', icon: Bot, desc: 'Prompt & skills' },
   ]
 
   return (
-    <div className="w-full space-y-6 p-4 sm:p-6 lg:p-8 animate-in motion-reduce:animate-none">
+    <div className="flex flex-col gap-6">
       {/* Header */}
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center gap-2.5">
@@ -251,7 +295,7 @@ export function Settings() {
             <SettingsIcon className="h-5 w-5" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-[1.75rem]">Settings</h1>
-          <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-primary/10 bg-primary-light px-2.5 py-1 text-[11px] font-bold tracking-wide text-primary">
+          <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-primary/10 bg-primary-light px-2.5 py-1 text-[11px] font-bold tracking-wide text-primary dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
             <Shield className="h-3 w-3" aria-hidden="true" />
             OWNER ONLY
           </span>
@@ -317,7 +361,7 @@ export function Settings() {
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <div className="card space-y-5">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-light text-primary border border-primary/10">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-light text-primary border border-primary/10 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
                     <User className="h-5 w-5" aria-hidden="true" />
                   </div>
                   <div>
@@ -415,76 +459,179 @@ export function Settings() {
             </div>
           )}
 
-          {/* AI Configuration */}
-          {tab === 'ai' && (
-            <div className="mx-auto max-w-3xl space-y-6">
-              <div className="card space-y-5 border-primary/10 shadow-glass">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-white shadow-sm">
-                      <Cpu className="h-5 w-5" aria-hidden="true" />
-                    </div>
-                    <div>
-                      <h3 className="text-[15px] font-semibold tracking-tight text-foreground">AI Configuration</h3>
-                      <p className="text-xs font-medium text-muted-foreground">OpenAI-compatible API — encrypted at rest.</p>
-                    </div>
+          {/* Company / Branding — smart inputs, no card, full width */}
+          {tab === 'company' && (
+            <div className="w-full">
+              <div className="flex items-start gap-4 pb-6 border-b border-border">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#404040] text-white shadow-sm shrink-0">
+                  <Building2 className="h-5 w-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-[16px] font-bold tracking-tight">Company Branding</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">This name and logo appear in the top-left menu. Logo is optional — we’ll show a sleek random icon if empty.</p>
+                </div>
+                <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">Live preview</span>
+              </div>
+
+              <div className="py-7 space-y-7">
+                {/* Company name — smart input */}
+                <div className="space-y-2">
+                  <label htmlFor="company-name" className="flex items-center gap-2 text-sm font-semibold">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary"><Building2 className="h-3.5 w-3.5" /></span>
+                    Company name <span className="text-destructive">*</span>
+                  </label>
+                  <div className="relative group">
+                    <input
+                      id="company-name"
+                      value={company.company_name}
+                      onChange={(e) => setCompany({ ...company, company_name: e.target.value })}
+                      placeholder="Acme Inc."
+                      maxLength={150}
+                      className="input h-11 pr-10 text-[15px] font-medium bg-card border-border group-hover:border-border focus:border-border focus:ring-0 focus-visible:border-border focus-visible:ring-0 focus-visible:ring-offset-0 transition-all"
+                    />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground tabular-nums">{company.company_name.length}/150</span>
                   </div>
-                  <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
-                    Encrypted
-                  </span>
+                  <p className="text-xs text-muted-foreground">Used in sidebar, browser tab and invoices.</p>
                 </div>
 
-                <div className="rounded-xl border border-primary/10 bg-primary-light/40 px-3.5 py-3 dark:bg-primary/10 flex items-start gap-2.5">
+                {/* Logo — smart upload */}
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2 text-sm font-semibold">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600"><ImageIcon className="h-3.5 w-3.5" /></span>
+                    Company logo <span className="text-xs font-normal text-muted-foreground">— optional, ≤1MB</span>
+                  </label>
+                  <div className="flex flex-col sm:flex-row gap-5">
+                    <div className="relative h-24 w-24 rounded-2xl border-2 border-dashed border-border bg-muted/20 flex items-center justify-center overflow-hidden shrink-0 hover:border-primary/30 hover:bg-muted/30 transition-colors group/logo">
+                      {companyPreview ? (
+                        <img src={companyPreview} alt="Company logo" className="h-full w-full object-contain p-2" />
+                      ) : (
+                        <div className="flex flex-col items-center gap-1.5 text-muted-foreground">
+                          <Building2 className="w-8 h-8 opacity-50 group-hover/logo:opacity-100 transition-opacity" />
+                          <span className="text-[11px] font-medium">No logo</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0 space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="btn btn-outline cursor-pointer gap-2 h-10 px-4 hover:border-primary/30 hover:text-primary">
+                          <Upload className="w-4 h-4" /> Upload image
+                          <input type="file" accept="image/*" className="hidden" onChange={onCompanyLogoFile} />
+                        </label>
+                        {companyPreview ? (
+                          <button type="button" onClick={() => { setCompany({ ...company, company_logo: null }); setCompanyPreview(null) }} className="btn btn-ghost gap-2 h-10">
+                            <X className="w-4 h-4" /> Remove
+                          </button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">PNG, JPG, SVG — stored as data URL</span>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <input
+                          id="company-logo-url"
+                          value={company.company_logo || ''}
+                          onChange={(e) => { const v = e.target.value; setCompany({ ...company, company_logo: v || null }); setCompanyPreview(v || null) }}
+                          placeholder="https://example.com/logo.png  or  data:image/..."
+                          className="input h-10 font-mono text-xs pr-9 bg-card"
+                        />
+                        <ImageIcon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      </div>
+                      <p className="text-xs leading-relaxed text-muted-foreground">No external hosting needed. If empty, a random icon appears in the menu — same logic as top-left fallback.</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Live preview — inline, not card */}
+                <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3.5">
+                  <div className="h-11 w-11 rounded-xl bg-[#404040] flex items-center justify-center overflow-hidden shrink-0">
+                    {companyPreview ? <img src={companyPreview} alt="preview" className="h-full w-full object-contain p-1.5" /> : <Building2 className="w-5 h-5 text-white" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold truncate">{company.company_name || '—'}</p>
+                    <p className="text-xs text-muted-foreground truncate">Preview • top-left menu • Workspace</p>
+                  </div>
+                  <span className="hidden sm:inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 pt-6 border-t border-border">
+                <p className="text-xs text-muted-foreground hidden sm:block">Changes apply instantly across the app.</p>
+                <button type="button" onClick={saveCompany} disabled={saving || !company.company_name.trim()} className="btn btn-primary gap-2 h-11 px-6 shadow-sm disabled:opacity-50 ml-auto">
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save branding
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* AI Configuration — smart inputs, no card, full width */}
+          {tab === 'ai' && (
+            <div className="w-full">
+              <div className="flex items-start justify-between gap-4 pb-6 border-b border-border">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-white shadow-sm shrink-0">
+                    <Cpu className="h-5 w-5" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <h3 className="text-[16px] font-bold tracking-tight">AI Configuration</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">OpenAI-compatible API — encrypted at rest.</p>
+                  </div>
+                </div>
+                <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300 shrink-0">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
+                  Encrypted
+                </span>
+              </div>
+
+              <div className="py-7 space-y-7">
+                <div className="flex gap-3 rounded-xl bg-primary-light/30 dark:bg-blue-950/20 border border-primary/10 dark:border-blue-900/30 px-4 py-3">
                   <Sparkles className="h-4 w-4 mt-0.5 text-primary shrink-0" aria-hidden="true" />
-                  <p className="text-xs leading-relaxed font-medium text-primary">
-                    Connect any OpenAI-compatible provider. Saving automatically restarts the agent to apply the new model.
+                  <p className="text-sm leading-relaxed text-primary dark:text-blue-300">
+                    Connect any OpenAI-compatible provider. Saving automatically restarts the agent.
                   </p>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label htmlFor="ai-url" className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-foreground">
-                      <Globe className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-                      Provider URL <span className="font-normal text-destructive">*</span>
-                    </label>
-                    <input
-                      id="ai-url"
-                      value={ai.provider_url}
-                      onChange={(e) => setAi({ ...ai, provider_url: e.target.value })}
-                      placeholder="https://api.openai.com/v1"
-                      className="input cursor-text font-mono text-[13px]"
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <label htmlFor="ai-url" className="flex items-center gap-2 text-sm font-semibold">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary"><Globe className="h-3.5 w-3.5" aria-hidden="true" /></span>
+                    Provider URL <span className="text-destructive">*</span>
+                  </label>
+                  <input
+                    id="ai-url"
+                    value={ai.provider_url}
+                    onChange={(e) => setAi({ ...ai, provider_url: e.target.value })}
+                    placeholder="https://api.openai.com/v1"
+                    className="input h-11 font-mono text-[13px] bg-card border-border hover:border-border focus:border-border focus:ring-0 focus-visible:border-border focus-visible:ring-0 focus-visible:ring-offset-0 transition-all"
+                  />
+                  <p className="text-xs text-muted-foreground">Must be a valid <span className="font-mono">https://</span> URL.</p>
+                </div>
 
-                  <div className="space-y-1.5">
-                    <label htmlFor="ai-model" className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-foreground">
-                      <Server className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-                      Model Name <span className="font-normal text-destructive">*</span>
-                    </label>
-                    <input
-                      id="ai-model"
-                      value={ai.model_name}
+                <div className="space-y-2">
+                  <label htmlFor="ai-model" className="flex items-center gap-2 text-sm font-semibold">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600"><Server className="h-3.5 w-3.5" aria-hidden="true" /></span>
+                    Model Name <span className="text-destructive">*</span>
+                  </label>
+                  <input
+                    id="ai-model"
+                    value={ai.model_name}
                       onChange={(e) => setAi({ ...ai, model_name: e.target.value })}
                       placeholder="gpt-4o-mini"
                       className="input cursor-text font-mono text-[13px]"
                     />
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label htmlFor="ai-key" className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-foreground">
-                      <Key className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                  <div className="space-y-2">
+                    <label htmlFor="ai-key" className="flex items-center gap-2 text-sm font-semibold">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600"><Key className="h-3.5 w-3.5" aria-hidden="true" /></span>
                       API Key
-                      <span className="ml-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold tracking-wide text-muted-foreground border border-border">SECRET</span>
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold tracking-wide text-muted-foreground border border-border">SECRET</span>
                     </label>
-                    <div className="relative">
+                    <div className="relative group">
                       <input
                         id="ai-key"
                         type={showKey ? 'text' : 'password'}
                         value={ai.api_key}
                         onChange={(e) => setAi({ ...ai, api_key: e.target.value })}
                         placeholder={ai.masked || '••••••••••••'}
-                        className="input cursor-text pr-10 font-mono text-[13px]"
+                        className="input h-11 pr-10 font-mono text-[13px] bg-card border-border group-hover:border-border focus:border-border focus:ring-0 focus-visible:border-border focus-visible:ring-0 focus-visible:ring-offset-0 transition-all"
                       />
                       <button
                         type="button"
@@ -492,30 +639,30 @@ export function Settings() {
                         className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                         aria-label={showKey ? 'Hide API key' : 'Show API key'}
                       >
-                        {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
                     {ai.masked && (
-                      <p className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/50 px-2.5 py-1 text-xs font-mono font-medium text-muted-foreground">
-                        <Shield className="h-3 w-3" aria-hidden="true" />
+                      <p className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-mono font-medium text-muted-foreground">
+                        <Shield className="w-3 h-3" aria-hidden="true" />
                         Current: {ai.masked}
                       </p>
                     )}
+                    <p className="text-xs text-muted-foreground">Stored encrypted — never exposed raw.</p>
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-2">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-6 border-t border-border">
                   <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                    <Lock className="h-3.5 w-3.5" aria-hidden="true" />
-                    Key is encrypted and never exposed raw.
+                    <Lock className="w-3.5 h-3.5" aria-hidden="true" />
+                    Encrypted at rest • restarts agent on save
                   </p>
-                  <button type="button" onClick={saveAI} disabled={saving} className="btn btn-primary cursor-pointer shrink-0 disabled:opacity-50">
+                  <button type="button" onClick={saveAI} disabled={saving} className="btn btn-primary gap-2 h-11 px-6 shadow-sm shrink-0 disabled:opacity-50">
                     {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
                     Save & Restart Agent
                   </button>
                 </div>
               </div>
-            </div>
           )}
 
           {/* Agent */}
@@ -625,7 +772,7 @@ export function Settings() {
               {/* System prompt */}
               <div className="card space-y-4">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-light text-primary border border-primary/10">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-light text-primary border border-primary/10 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
                     <FileText className="h-5 w-5" aria-hidden="true" />
                   </div>
                   <div>
@@ -815,7 +962,7 @@ export function Settings() {
 
       {/* Footer trust */}
       <div className="flex items-start gap-3 rounded-2xl border border-border bg-card px-4 py-3.5 shadow-soft">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary border border-primary/10">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary border border-primary/10 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
           <Shield className="h-4 w-4" aria-hidden="true" />
         </div>
         <div className="space-y-1">

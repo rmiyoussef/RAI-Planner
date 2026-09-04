@@ -145,7 +145,7 @@ export function Users() {
   }
 
   return (
-    <div className="w-full space-y-6 p-4 sm:p-6 lg:p-8 animate-in motion-reduce:animate-none">
+    <div className="flex flex-col gap-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1.5">
@@ -157,7 +157,7 @@ export function Users() {
               <UsersIcon className="h-5 w-5" />
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-[1.75rem]">Users</h1>
-            <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-primary/10 bg-primary-light px-2.5 py-1 text-xs font-bold text-primary">
+            <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-primary/10 bg-primary-light px-2.5 py-1 text-xs font-bold text-primary dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
               <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
               Internal only
             </span>
@@ -224,7 +224,7 @@ export function Users() {
         >
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-primary/10 bg-primary-light text-primary">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-primary/10 bg-primary-light text-primary dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
                 <UserPlus className="h-5 w-5" aria-hidden="true" />
               </div>
               <div>
@@ -300,7 +300,7 @@ export function Users() {
                 value={form.github_url}
                 onChange={(e) => setForm({ ...form, github_url: e.target.value })}
                 placeholder="https://github.com/octocat"
-                className={`input cursor-text font-mono text-[13px] ${form.github_url && !githubValid ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20' : ''}`}
+                className={`input cursor-text font-mono text-[13px] ${form.github_url && !githubValid ? 'border-red-300 focus:border-red-300 focus:ring-0 focus-visible:border-red-300 focus-visible:ring-0' : ''}`}
                 aria-invalid={!!form.github_url && !githubValid}
                 aria-describedby="github-help"
               />
@@ -347,7 +347,7 @@ export function Users() {
               <Hash className="h-3.5 w-3.5" aria-hidden="true" />
               {items.length} {items.length === 1 ? 'member' : 'members'}
             </span>
-            <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-primary/10 bg-primary-light px-2.5 py-1 text-[11px] font-semibold text-primary">
+            <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-primary/10 bg-primary-light px-2.5 py-1 text-[11px] font-semibold text-primary dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
               <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" aria-hidden="true" />
               Managed
             </span>
@@ -464,7 +464,7 @@ export function Users() {
                             value={editForm.github_url ?? ''}
                             onChange={(e) => setEditForm({ ...editForm, github_url: e.target.value })}
                             placeholder="https://github.com/username"
-                            className={`input h-9 cursor-text py-1.5 font-mono text-xs ${editForm.github_url && !editGithubValid ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20' : ''}`}
+                            className={`input h-9 cursor-text py-1.5 font-mono text-xs ${editForm.github_url && !editGithubValid ? 'border-red-300 focus:border-red-300 focus:ring-0 focus-visible:border-red-300 focus-visible:ring-0' : ''}`}
                             aria-invalid={!!editForm.github_url && !editGithubValid}
                           />
                           {editForm.github_url && !editGithubValid && (
@@ -581,7 +581,7 @@ export function Users() {
 
       {/* Trust note */}
       <div className="flex items-start gap-3 rounded-2xl border border-border bg-card px-4 py-3.5 shadow-soft">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary border border-primary/10">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary border border-primary/10 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
           <ShieldCheck className="h-4 w-4" aria-hidden="true" />
         </div>
         <div className="space-y-1">

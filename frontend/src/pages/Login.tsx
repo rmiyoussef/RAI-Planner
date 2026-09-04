@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../store/AuthContext'
 import { useNavigate, Link } from 'react-router-dom'
-import { Mail, Lock, ArrowRight, Sparkles, Loader2, ShieldCheck } from 'lucide-react'
+import { api } from '../api/client'
+import { ApiError } from '../api/client'
+import { Mail, Lock, ArrowRight, Sparkles, Loader2, ShieldCheck, AlertCircle, Clock } from 'lucide-react'
 
 export function Login() {
   const { login } = useAuth()
@@ -9,110 +11,167 @@ export function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [errorDetail, setErrorDetail] = useState('')
   const [loading, setLoading] = useState(false)
+  const [signupAllowed, setSignupAllowed] = useState<boolean | null>(null)
+  const [retryAfter, setRetryAfter] = useState<number | null>(null)
+  const retryTimerRef = useRef<number | null>(null)
+  const [company, setCompany] = useState<{ company_name: string; company_logo: string | null } | null>(null)
+
+  useEffect(() => {
+    api.get('/auth/signup-status').then((d:any)=> setSignupAllowed(!!d.allowed)).catch(()=> setSignupAllowed(false))
+    api.get('/settings/company/public').then((d:any)=> {
+      if (d?.initialized && d?.company_name) setCompany({ company_name: d.company_name, company_logo: d.company_logo || null })
+    }).catch(()=>{})
+  }, [])
+
+  // countdown for rate limit
+  useEffect(() => {
+    if (retryAfter === null || retryAfter <= 0) return
+    retryTimerRef.current = window.setTimeout(() => setRetryAfter((prev) => (prev !== null ? prev - 1 : null)), 1000)
+    return () => { if (retryTimerRef.current) window.clearTimeout(retryTimerRef.current) }
+  }, [retryAfter])
+
+  useEffect(() => {
+    if (retryAfter !== null && retryAfter <= 0) setRetryAfter(null)
+  }, [retryAfter])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
-    if (!email || !password) { setError('Email and password are required'); return }
+    setErrorDetail('')
+    const trimmedEmail = email.trim()
+    if (!trimmedEmail || !password) { setError('Email and password are required'); return }
+    if (retryAfter !== null && retryAfter > 0) {
+      setError(`Too many attempts. Please try again in ${retryAfter}s.`)
+      return
+    }
     setLoading(true)
     try {
-      await login(email, password)
+      await login(trimmedEmail, password)
       navigate('/')
-    } catch (err: any) { setError(err.message) }
-    finally { setLoading(false) }
+    } catch (err: any) {
+      // Handle ApiError with status
+      const status = err instanceof ApiError ? err.status : err?.status
+      const detail = err instanceof ApiError ? err.detail : err?.message || String(err)
+      if (status === 429) {
+        const retry = err instanceof ApiError ? parseInt(err.headers.get('Retry-After') || '60', 10) : 60
+        const secs = isNaN(retry) ? 60 : retry
+        setRetryAfter(secs)
+        setError('Too many login attempts')
+        setErrorDetail(detail || `Please wait ${secs} seconds before trying again.`)
+      } else if (status === 401) {
+        setError('Invalid email or password')
+        setErrorDetail('Please check your credentials and try again. Passwords are case-sensitive.')
+        // keep email, clear password for security and focus
+        setPassword('')
+      } else {
+        setError(detail || 'Sign in failed. Please try again.')
+        setErrorDetail('')
+      }
+    } finally { setLoading(false) }
   }
 
-  return (
-    <div className="min-h-screen bg-background flex">
-      {/* Left - brand */}
-      <div className="hidden lg:flex w-[48%] bg-gradient-to-br from-primary via-primary to-secondary relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_rgba(255,255,255,0.15),_transparent_60%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_rgba(234,88,12,0.15),_transparent_60%)]" />
-        <div className="relative flex flex-col justify-between p-12 text-white w-full">
-          <div className="inline-flex items-center gap-2 text-white/80 text-sm">
-            <div className="w-8 h-8 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            RAI Planner • Business Edition
-          </div>
-          <div className="space-y-6">
-            <h1 className="text-[40px] font-bold leading-[0.95] tracking-tight">
-              Turn rough ideas<br />
-              into <span className="text-white/90 underline decoration-white/30 underline-offset-8">shippable</span><br />
-              engineering tasks
-            </h1>
-            <p className="text-white/80 text-[15px] leading-relaxed max-w-[420px]">
-              Your Smart Engineering Agent reads your repo + <code className="bg-white/15 px-1.5 py-0.5 rounded text-white">.brain</code> and transforms vague tasks into actionable, versioned work.
-            </p>
-            <div className="flex items-center gap-3 pt-2">
-              <div className="flex -space-x-2">
-                <div className="w-8 h-8 rounded-full bg-white/20 border-2 border-white/20 backdrop-blur" />
-                <div className="w-8 h-8 rounded-full bg-white/30 border-2 border-white/20 backdrop-blur" />
-                <div className="w-8 h-8 rounded-full bg-white/40 border-2 border-white/20 backdrop-blur grid place-items-center text-xs font-bold">+2k</div>
-              </div>
-              <span className="text-sm text-white/70">Trusted by engineering teams</span>
-            </div>
-          </div>
-          <p className="text-xs text-white/50">© {new Date().getFullYear()} RAI Planner • Secure • Versioned • Auditable</p>
-        </div>
-      </div>
+  const isRateLimited = retryAfter !== null && retryAfter > 0
 
-      {/* Right - form */}
-      <div className="flex-1 flex items-center justify-center p-6 lg:p-12 bg-background">
-        <form onSubmit={submit} className="w-full max-w-[420px] space-y-6">
-          <div className="space-y-2">
-            <div className="lg:hidden inline-flex items-center gap-2 rounded-full bg-primary-light border border-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-              <Sparkles className="w-3.5 h-3.5" /> RAI Planner
+  return (
+    <div className="min-h-screen bg-muted/30 dark:bg-background flex items-center justify-center p-4 sm:p-6">
+      <div className="w-full max-w-[440px]">
+        <form onSubmit={submit} className="card p-6 sm:p-8 space-y-6 shadow-medium" noValidate>
+          <div className="space-y-3 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-secondary text-white shadow-sm overflow-hidden">
+              {company?.company_logo ? (
+                <img src={company.company_logo} alt={`${company.company_name} logo`} className="h-full w-full object-cover" />
+              ) : (
+                <Sparkles className="w-6 h-6" />
+              )}
             </div>
-            <h1 className="text-[28px] font-bold tracking-tight">Welcome back</h1>
-            <p className="text-muted-foreground text-sm">Sign in to your business workspace</p>
+            <div className="space-y-1">
+              <h1 className="text-[26px] font-bold tracking-tight">
+                {company ? `Welcome back to ${company.company_name}` : 'Welcome back'}
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                {company ? `Continue work at ${company.company_name} — sign in to your workspace` : 'Sign in to your business workspace'}
+              </p>
+            </div>
+            {company && (
+              <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-border bg-muted/30 px-3 py-1 text-xs font-medium text-muted-foreground">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                {company.company_name} • Workspace ready
+              </div>
+            )}
           </div>
 
           {error && (
-            <div className="rounded-xl border border-destructive/20 bg-red-50 dark:bg-red-950/30 px-4 py-3 text-sm text-destructive flex gap-2">
-              <span className="shrink-0">⚠</span> <span>{error}</span>
+            <div
+              role="alert"
+              className={`rounded-xl border px-4 py-3 text-sm flex gap-3 ${isRateLimited ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200' : 'border-destructive/20 bg-red-50 dark:bg-red-950/30 text-destructive'}`}
+            >
+              <span className="shrink-0 mt-0.5">
+                {isRateLimited ? <Clock className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+              </span>
+              <div className="flex-1 min-w-0 space-y-1">
+                <p className="font-semibold">{error}</p>
+                {errorDetail && <p className="text-xs opacity-90 leading-relaxed">{errorDetail}</p>}
+                {isRateLimited && retryAfter !== null && (
+                  <p className="text-xs font-medium tabular-nums">Try again in {retryAfter}s</p>
+                )}
+              </div>
             </div>
           )}
 
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Work email</label>
+              <label htmlFor="login-email" className="text-sm font-medium">Work email</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
+                  id="login-email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder="you@company.com"
                   type="email"
                   required
+                  autoComplete="email"
+                  autoFocus
                   className="input pl-10"
+                  aria-invalid={!!error && error.includes('Invalid')}
+                  disabled={isRateLimited}
                 />
               </div>
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">Password</label>
+                <label htmlFor="login-password" className="text-sm font-medium">Password</label>
                 <span className="text-xs text-muted-foreground">Min 8 characters</span>
               </div>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
+                  id="login-password"
                   type="password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
+                  autoComplete="current-password"
                   className="input pl-10"
+                  aria-invalid={!!error && error.includes('Invalid')}
+                  disabled={isRateLimited}
                 />
               </div>
             </div>
           </div>
 
-          <button type="submit" disabled={loading} className="btn btn-primary w-full h-11 text-[15px] shadow-sm">
+          <button
+            type="submit"
+            disabled={loading || isRateLimited}
+            className="btn btn-primary w-full h-11 text-[15px] shadow-sm disabled:opacity-60"
+          >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            {loading ? 'Signing in...' : 'Sign in to workspace'}
-            {!loading && <ArrowRight className="w-4 h-4" />}
+            {loading ? 'Signing in...' : isRateLimited ? `Wait ${retryAfter}s` : 'Sign in to workspace'}
+            {!loading && !isRateLimited && <ArrowRight className="w-4 h-4" />}
+            {isRateLimited && <Clock className="w-4 h-4" />}
           </button>
 
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -120,9 +179,11 @@ export function Login() {
             Encrypted • Auditable • Your data stays in your projects
           </div>
 
-          <p className="text-center text-sm text-muted-foreground">
-            No account? <Link to="/signup" className="font-semibold text-primary hover:underline cursor-pointer">Create business account</Link>
-          </p>
+          {signupAllowed === true && (
+            <p className="text-center text-sm text-muted-foreground">
+              No account? <Link to="/signup" className="font-semibold text-primary hover:underline cursor-pointer">Create business account</Link>
+            </p>
+          )}
 
           <p className="text-center text-xs text-muted-foreground">
             By signing in you agree to our Terms and DPA. Light mode is default — toggle in sidebar.

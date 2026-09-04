@@ -3,6 +3,10 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 import fs from 'fs'
 
+// Ports follow .env (exported by start.sh); defaults match .env.example.
+const BACKEND_PORT = process.env.BACKEND_PORT || '8000'
+const FRONTEND_PORT = Number(process.env.FRONTEND_PORT) || 5173
+
 function backendHotReload() {
   return {
     name: 'backend-hot-reload',
@@ -26,7 +30,7 @@ function backendHotReload() {
       let backendWasDown = false
       setInterval(async () => {
         try {
-          const res = await fetch('http://localhost:8000/api/health').then(r => r.ok).catch(() => false)
+          const res = await fetch(`http://localhost:${BACKEND_PORT}/api/health`).then(r => r.ok).catch(() => false)
           if (!res) backendWasDown = true
           else if (backendWasDown) {
             backendWasDown = false
@@ -42,7 +46,7 @@ function backendHotReload() {
 export default defineConfig({
   plugins: [react(), backendHotReload()],
   server: {
-    port: 5173,
+    port: FRONTEND_PORT,
     host: '0.0.0.0',
     allowedHosts: true,
     hmr: { overlay: true },
@@ -51,7 +55,7 @@ export default defineConfig({
       ignored: ['!**/backend/**', '**/node_modules/**', '**/.venv/**', '**/__pycache__/**'],
     },
     proxy: {
-      '/api': 'http://localhost:8000'
+      '/api': `http://localhost:${BACKEND_PORT}`
     }
   },
   test: {

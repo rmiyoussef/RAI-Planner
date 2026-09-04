@@ -71,7 +71,11 @@ need_cmd curl
 
 API_PREFIX=$(grep -E "^API_PREFIX=" .env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
 [ -z "$API_PREFIX" ] && API_PREFIX="/api"
-BACKEND_BASE="http://127.0.0.1:8000"
+# Backend port is 8000 by default; servers where :8000 is taken (e.g. bench-server
+# runs the backend on :8001) set BACKEND_PORT=8001 in .env (ignored by the app).
+BACKEND_PORT=$(grep -E "^BACKEND_PORT=" .env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
+[ -z "$BACKEND_PORT" ] && BACKEND_PORT="8000"
+BACKEND_BASE="http://127.0.0.1:${BACKEND_PORT}"
 mkdir -p logs
 
 # --- shared helpers ----------------------------------------------------------
@@ -167,7 +171,7 @@ restart_backend() {
     kill -0 "$pid" 2>/dev/null && { echo "✗ Old backend (pid $pid) refused to stop. Kill it manually."; exit 1; }
     rm -f logs/backend.pid
   elif backend_health_ok; then
-    echo "✗ Backend on :8000 is running OUTSIDE update.sh control (no logs/backend.pid)."
+    echo "✗ Backend on :${BACKEND_PORT} is running OUTSIDE update.sh control (no logs/backend.pid)."
     echo "  Restart it manually (docker / systemd / screen), then re-run ./update.sh --verify-only."
     exit 1
   else
@@ -177,7 +181,7 @@ restart_backend() {
     echo "✗ backend/.venv missing uvicorn — run ./install.sh first."; exit 1
   fi
   # Same launch flags as start.sh so behavior matches dev/prod runs.
-  ( cd backend && nohup .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir "$ROOT/backend/app" > "$ROOT/logs/backend.log" 2>&1 & echo $! > "$ROOT/logs/backend.pid" )
+  ( cd backend && nohup .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT" --reload --reload-dir "$ROOT/backend/app" > "$ROOT/logs/backend.log" 2>&1 & echo $! > "$ROOT/logs/backend.pid" )
   echo "  Waiting for health (pid $(cat logs/backend.pid))..."
   for _ in $(seq 1 60); do
     backend_health_ok && break

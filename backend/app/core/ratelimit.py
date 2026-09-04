@@ -10,6 +10,11 @@ from fastapi import HTTPException, Request
 _BUCKETS: dict = defaultdict(deque)
 
 
+def reset_rate_limits() -> None:
+    """Clear all buckets (test helper — isolates rate-limit state between tests)."""
+    _BUCKETS.clear()
+
+
 def rate_limit(request: Request, scope: str, limit: int, window_seconds: int) -> None:
     """Raise 429 when `limit` calls within `window_seconds` exceeded for client IP+scope."""
     client_ip = request.client.host if request.client else "unknown"

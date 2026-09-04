@@ -1,13 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from typing import Optional
-from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse
+from app.schemas.project import (
+    ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse,
+    SystemPromptUpdate, SystemPromptGenerateResponse,
+)
 from app.core.database import get_collection, new_id, utc_now
 from app.api.deps import get_current_owner
 from app.services.filesystem import brain_status, validate_project_path
 from app.core.ratelimit import rate_limit
+from app.agents.prompt_manager import DEFAULT_PROJECT_SYSTEM_PROMPT
 import re
 
 router = APIRouter(prefix="/projects", tags=["projects"])
+
+def project_system_prompt(doc) -> str:
+    """Stored prompt, default fallback, or legacy-doc fallback."""
+    return (doc.get("system_prompt") or "").strip() or DEFAULT_PROJECT_SYSTEM_PROMPT
 
 def doc_to_resp(doc, task_count=0):
     brain = brain_status(doc["project_path"]) if doc.get("project_path") else {"exists": False}
@@ -19,6 +27,7 @@ def doc_to_resp(doc, task_count=0):
         project_path=doc.get("project_path",""),
         tags=doc.get("tags",[]),
         status=doc.get("status","active"),
+        system_prompt=project_system_prompt(doc),
         created_at=doc.get("created_at"),
         updated_at=doc.get("updated_at"),
         task_count=task_count,
@@ -89,6 +98,7 @@ async def create_project(payload: ProjectCreate, request: Request, owner=Depends
         "project_path": project_path,
         "tags": payload.tags,
         "status": payload.status,
+        "system_prompt": (payload.system_prompt or "").strip() or DEFAULT_PROJECT_SYSTEM_PROMPT,
         "created_at": utc_now(),
         "updated_at": utc_now(),
     }
@@ -120,6 +130,9 @@ async def update_project(project_id: str, payload: ProjectUpdate, owner=Depends(
         val = getattr(payload, field)
         if val is not None:
             updates[field] = val
+    if payload.system_prompt is not None:
+        # empty string resets to the default policy
+        updates["system_prompt"] = payload.system_prompt.strip() or DEFAULT_PROJECT_SYSTEM_PROMPT
     if "project_path" in updates and updates["project_path"]:
         ok, err_or_resolved = validate_project_path(updates["project_path"])
         if not ok:
@@ -144,6 +157,59 @@ async def disable_project(project_id: str, owner=Depends(get_current_owner)):
     tasks_col = get_collection("tasks")
     cnt = await tasks_col.count_documents({"project_id": project_id, "owner_id": owner["_id"]})
     return doc_to_resp(doc, cnt)
+
+@router.put("/{project_id}/system-prompt", response_model=ProjectResponse)
+async def update_system_prompt(project_id: str, payload: SystemPromptUpdate, request: Request, owner=Depends(get_current_owner)):
+    """Persist the project's engineering system prompt (explicit Save only)."""
+    rate_limit(request, "put_sysprompt", limit=30, window_seconds=60)
+    col = get_collection("projects")
+    doc = await col.find_one({"_id": project_id, "owner_id": owner["_id"]})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Project not found")
+    system_prompt = (payload.system_prompt or "").strip() or DEFAULT_PROJECT_SYSTEM_PROMPT
+    await col.update_one(
+        {"_id": project_id},
+        {"$set": {"system_prompt": system_prompt, "updated_at": utc_now()}},
+    )
+    doc = await col.find_one({"_id": project_id})
+    tasks_col = get_collection("tasks")
+    cnt = await tasks_col.count_documents({"project_id": project_id, "owner_id": owner["_id"]})
+    return doc_to_resp(doc, cnt)
+
+@router.post("/{project_id}/system-prompt/generate", response_model=SystemPromptGenerateResponse)
+async def generate_system_prompt(project_id: str, request: Request, owner=Depends(get_current_owner)):
+    """Analyze the actual project and draft its system prompt.
+
+    Read-only: never modifies source code and never persists — the caller
+    must explicitly apply/save the returned prompt.
+    """
+    from app.agents.smart_engineering_agent import agent
+    rate_limit(request, "gen_sysprompt", limit=5, window_seconds=60)
+    col = get_collection("projects")
+    doc = await col.find_one({"_id": project_id, "owner_id": owner["_id"]})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        result = await agent.generate_system_prompt(owner["_id"], project_id)
+        return SystemPromptGenerateResponse(
+            system_prompt=result["system_prompt"], analysis=result["analysis"]
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except RuntimeError as re:
+        raise HTTPException(status_code=502, detail=str(re))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{project_id}/system-prompt/generate/progress")
+async def system_prompt_progress(project_id: str, request: Request, owner=Depends(get_current_owner)):
+    """Live per-stage progress of a running system-prompt generation."""
+    from app.agents.smart_engineering_agent import get_generation_progress
+    rate_limit(request, "gen_sysprompt_progress", limit=60, window_seconds=60)
+    doc = await get_collection("projects").find_one({"_id": project_id, "owner_id": owner["_id"]})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return get_generation_progress(owner["_id"], project_id, scope="sysprompt")
 
 @router.get("/{project_id}/brain")
 async def brain_info(project_id: str, owner=Depends(get_current_owner)):

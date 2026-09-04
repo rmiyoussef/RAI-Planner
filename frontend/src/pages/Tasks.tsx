@@ -1318,7 +1318,7 @@ export function Tasks() {
 
               {/* Description — Edit / Preview with polished markdown */}
               <section className="card space-y-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="sticky top-0 z-10 -mx-1 bg-card/95 px-1 py-2 backdrop-blur flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <h3 className="inline-flex flex-wrap items-center gap-2 text-sm font-semibold tracking-tight text-foreground">
                     <span className="inline-flex items-center gap-1.5">
                       <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white shadow-sm">

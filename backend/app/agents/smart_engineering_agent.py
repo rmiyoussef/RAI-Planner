@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from datetime import datetime, timezone
 from app.core.database import get_collection, new_id, utc_now
 from app.agents.brain_reader import BrainReader
@@ -15,9 +16,9 @@ logger = logging.getLogger(__name__)
 # Stages map to the frontend GENERATING_STAGES list; stage == 6 means all done.
 _generation_progress: dict[str, dict] = {}
 
-def get_generation_progress(owner_id: str, task_id: str) -> dict:
+def get_generation_progress(owner_id: str, subject: str, scope: str = "task") -> dict:
     return _generation_progress.get(
-        f"{owner_id}:{task_id}", {"status": "idle", "stage": 0, "detail": ""}
+        f"{owner_id}:{subject}:{scope}", {"status": "idle", "stage": 0, "detail": ""}
     )
 
 class SmartEngineeringAgent:
@@ -89,8 +90,8 @@ class SmartEngineeringAgent:
         await self.start()
         return await self.get_status(owner_id="system")  # placeholder
 
-    def _set_progress(self, owner_id: str, task_id: str, stage: int, status: str = "running", detail: str = ""):
-        _generation_progress[f"{owner_id}:{task_id}"] = {
+    def _set_progress(self, owner_id: str, subject: str, stage: int, status: str = "running", detail: str = "", scope: str = "task"):
+        _generation_progress[f"{owner_id}:{subject}:{scope}"] = {
             "status": status,
             "stage": stage,
             "detail": detail,
@@ -137,6 +138,15 @@ class SmartEngineeringAgent:
             valid, msg = validate_project_path(project_path)
             if not valid:
                 raise ValueError(f"Project path error: {msg}")
+            # Project engineering policy FIRST — before context, prompts, or model calls.
+            from app.agents.prompt_manager import DEFAULT_PROJECT_SYSTEM_PROMPT
+            stored_policy = (project.get("system_prompt") or "").strip()
+            project_policy = stored_policy or DEFAULT_PROJECT_SYSTEM_PROMPT
+            logger.info(
+                "Task %s: using project system prompt (%s, %d chars)",
+                task_id, "custom" if stored_policy else "default", len(project_policy),
+            )
+            self._set_progress(owner_id, task_id, 0, "running", "Reading project system prompt")
             # 5-6 inspect .brain/context
             self._set_progress(owner_id, task_id, 1, "running", "Scanning project files & .brain")
             context = collect_project_context(project_path)
@@ -158,10 +168,11 @@ class SmartEngineeringAgent:
                 system_prompt = settings.get("system_prompt")
             # 9 skills
             skills_text = await self.skill_manager.enabled_skills_text(owner_id)
-            # 10 build prompts
+            # 10 build prompts (project engineering policy takes priority)
             self._set_progress(owner_id, task_id, 2, "running", "Building context & prompt")
-            pm = PromptManager(system_prompt)
+            pm = PromptManager(system_prompt, project_policy=project_policy)
             user_prompt = pm.build_user_prompt(task, project, context, skills_text)
+            system_prompt = pm.get_system_prompt()
             # 11-13 generate
             # ensure agent is considered running
             if not self.is_running:
@@ -273,6 +284,95 @@ class SmartEngineeringAgent:
             try:
                 cur_stage = get_generation_progress(owner_id, task_id).get("stage", 0)
                 self._set_progress(owner_id, task_id, cur_stage, "error", err_msg[:200])
+            except: pass
+            raise
+
+    async def generate_system_prompt(self, owner_id: str, project_id: str) -> dict:
+        """Analyze the actual project and draft its engineering system prompt.
+
+        Read-only: never modifies source, never persists. The caller decides
+        whether to apply the result. Returns {"system_prompt", "analysis"}.
+        Progress is reported under scope "sysprompt" for live UI polling.
+        """
+        from app.agents.prompt_manager import SYSTEM_PROMPT_GENERATOR_SYS
+        from app.services.filesystem import (
+            analyze_project, collect_project_context, validate_project_path,
+        )
+
+        def prog(stage: int, detail: str, status: str = "running"):
+            self._set_progress(owner_id, project_id, stage, status, detail, scope="sysprompt")
+
+        self.state = "running"
+        self.last_activity = utc_now()
+        prog(0, "Reading project structure")
+        try:
+            projects_col = get_collection("projects")
+            project = await projects_col.find_one({"_id": project_id, "owner_id": owner_id})
+            if not project:
+                raise ValueError("Project not found")
+            project_path = project.get("project_path") or ""
+            valid, msg = validate_project_path(project_path)
+            if not valid:
+                raise ValueError(f"Project path error: {msg}")
+            if not self.is_running:
+                await self.start()
+
+            prog(1, "Detecting framework & architecture")
+            analysis = analyze_project(project_path)
+            prog(2, "Inspecting APIs")
+            prog(3, "Inspecting tests")
+            prog(4, "Reading .brain & docs")
+            context = collect_project_context(project_path)
+            brain = (context.get("brain_content") or "")[:8000]
+            structure = "\n".join((context.get("structure_sample") or [])[:80])
+            top = ", ".join((context.get("top_level") or [])[:30])
+
+            prog(5, "Building engineering rules")
+            import json as _json
+            existing = ((project.get("system_prompt") or "").strip())[:4000]
+            user_prompt = f"""Project: {project.get('name')} - {project.get('description', '')}
+Project Path: {project.get('project_path')}
+Top-level: {top}
+Structure sample:
+{structure}
+
+Detected analysis (verify against code; mark unknowns as "verify in code"):
+{_json.dumps(analysis, indent=1)[:4000]}
+
+.brain content:
+{brain if brain else '(no .brain or empty)'}
+
+Existing system prompt draft (preserve its valuable project-specific rules, improve the rest):
+{existing if existing else '(none — write a fresh project-specific prompt)'}
+
+Generate the best project-specific engineering system prompt now."""
+
+            prog(6, "Generating prompt")
+            def _provider_cb(msg: str):
+                self._set_progress(owner_id, project_id, 6, "running", msg, scope="sysprompt")
+            raw = await self.ai_provider.generate(
+                owner_id, SYSTEM_PROMPT_GENERATOR_SYS, user_prompt, on_progress=_provider_cb
+            )
+            # Strip accidental fences — callers expect raw prompt Markdown.
+            cleaned = (raw or "").strip()
+            if cleaned.startswith("```"):
+                cleaned = re.sub(r"^```[\w+-]*\n?", "", cleaned)
+                cleaned = re.sub(r"\n?```\s*$", "", cleaned).strip()
+            if not cleaned:
+                raise RuntimeError("AI provider returned an empty system prompt.")
+            self.state = "idle"
+            self.last_success = utc_now()
+            self.last_activity = utc_now()
+            prog(7, "Done", status="done")
+            return {"system_prompt": cleaned, "analysis": analysis}
+        except Exception as e:
+            err_msg = str(e)
+            self.state = "failed"
+            self.last_error = err_msg[:500]
+            self.last_activity = utc_now()
+            try:
+                cur = get_generation_progress(owner_id, project_id, scope="sysprompt").get("stage", 0)
+                self._set_progress(owner_id, project_id, cur, "error", err_msg[:200], scope="sysprompt")
             except: pass
             raise
 

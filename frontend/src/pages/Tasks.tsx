@@ -89,9 +89,9 @@ export function Tasks() {
   const [descSaveStatus, setDescSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const descTimeoutRef = useRef<number | null>(null)
 
-  // Tags editing
+  // Tags editing (multi-add, same as Labels)
   const [tagsDraft, setTagsDraft] = useState('')
-  const [tagsEditing, setTagsEditing] = useState(false)
+  const [drawerTagInput, setDrawerTagInput] = useState('')
 
   // Delete confirmation
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -160,7 +160,7 @@ export function Tasks() {
       setDescDraft(selected.description ?? '')
       setTagsDraft(Array.isArray(selected.tags) ? selected.tags.join(', ') : (selected.tags ?? ''))
       setTitleEditing(false)
-      setTagsEditing(false)
+      setDrawerTagInput('')
       setSaveStatus('idle')
       setDescSaveStatus('idle')
       setSaveError('')
@@ -328,20 +328,41 @@ export function Tasks() {
     }
   }
 
-  // Tags
-  async function saveTags() {
-    const parsed = tagsDraft.split(',').map((s) => s.trim()).filter(Boolean)
+  // Tags (multi-add, same as Labels in create drawer — auto-save)
+  function parseDrawerTags(value: string): string[] {
+    return value.split(',').map((s) => s.trim()).filter(Boolean)
+  }
+  async function commitDrawerTags(nextDraft: string) {
+    const parsed = parseDrawerTags(nextDraft)
     const current = selected?.tags ?? []
-    if (JSON.stringify(parsed) === JSON.stringify(current)) {
-      setTagsEditing(false)
-      return
-    }
+    setTagsDraft(nextDraft)
+    if (JSON.stringify(parsed) === JSON.stringify(current)) return
     try {
       await patchTask({ tags: parsed }, { tags: parsed })
-      setTagsEditing(false)
     } catch {
-      // keep editing
+      // keep draft so user doesn't lose input
     }
+  }
+  async function saveTags() {
+    await commitDrawerTags(tagsDraft)
+  }
+  function addDrawerTagsFromInput(raw: string) {
+    const parts = raw.split(',').map((s) => s.trim()).filter(Boolean)
+    if (!parts.length) return
+    const existing = parseDrawerTags(tagsDraft)
+    const existingLower = new Set(existing.map((t) => t.toLowerCase()))
+    const toAdd = parts.filter((p) => !existingLower.has(p.toLowerCase()))
+    if (!toAdd.length) {
+      setDrawerTagInput('')
+      return
+    }
+    const next = [...existing, ...toAdd].join(', ')
+    setDrawerTagInput('')
+    void commitDrawerTags(next)
+  }
+  function removeDrawerTag(tag: string) {
+    const next = parseDrawerTags(tagsDraft).filter((t) => t !== tag).join(', ')
+    void commitDrawerTags(next)
   }
 
   async function handleDeleteTask() {
@@ -629,6 +650,7 @@ export function Tasks() {
               <p className="text-xs text-muted-foreground">Supports <span className="font-mono font-medium">Markdown</span> — preview in task view</p>
             </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <label htmlFor="task-type" className="flex items-center gap-2 text-sm font-semibold">
                 <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600"><Tag className="h-3.5 w-3.5" aria-hidden="true" /></span>
@@ -717,7 +739,7 @@ export function Tasks() {
 
             <div className="space-y-2 sm:col-span-2">
               <label htmlFor="task-tags" className="flex items-center justify-between gap-2 text-sm font-semibold">
-                <span className="flex items-center gap-2"><span className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600"><Tag className="h-3.5 w-3.5" aria-hidden="true" /></span> Labels <span className="text-xs font-normal text-muted-foreground">— add many</span></span>
+                <span className="flex items-center gap-2"><span className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600"><Tag className="h-3.5 w-3.5" aria-hidden="true" /></span> Tags <span className="text-xs font-normal text-muted-foreground">— add many</span></span>
                 <span className="text-[11px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{form.tags.split(',').filter(s=>s.trim()).length} selected</span>
               </label>
               <div className="group relative flex flex-wrap gap-1.5 p-2.5 rounded-xl border border-border bg-card min-h-[48px] focus-within:border-border focus-within:ring-0 focus-within:ring-offset-0 hover:border-border dark:hover:border-border transition-all shadow-sm">
@@ -732,7 +754,7 @@ export function Tasks() {
                   return (
                     <span key={t} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold shadow-sm hover:shadow-md hover:scale-[1.02] transition-all ${cls}`}>
                       {t}
-                      <button type="button" onClick={() => setForm({ ...form, tags: form.tags.split(',').map(s=>s.trim()).filter(s=>s!==t).join(', ') })} className="ml-0.5 rounded-full bg-white/20 hover:bg-white/30 p-0.5 -mr-1">
+                      <button type="button" onClick={() => setForm({ ...form, tags: form.tags.split(',').map(s=>s.trim()).filter(s=>s!==t).join(', ') })} className="ml-0.5 rounded-full bg-white/20 hover:bg-white/30 p-0.5 -mr-1" aria-label={`Remove tag ${t}`}>
                         <X className="h-3 w-3" />
                       </button>
                     </span>
@@ -742,37 +764,37 @@ export function Tasks() {
                   id="task-tags"
                   value={tagInput}
                   onChange={(e) => setTagInput(e.target.value)}
-                  onFocus={() => {}}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ',') {
                       e.preventDefault()
                       const parts = tagInput.split(',').map(s=>s.trim()).filter(Boolean)
-                      let newTags = form.tags
-                      for (const val of parts) {
-                        if (val && !newTags.split(',').map(s=>s.trim()).includes(val)) {
-                          newTags = newTags ? `${newTags}, ${val}` : val
-                        }
+                      const existingLower = new Set(form.tags.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean))
+                      const toAdd = parts.filter((p) => !existingLower.has(p.toLowerCase()))
+                      if (toAdd.length) {
+                        const existing = form.tags.split(',').map(s=>s.trim()).filter(Boolean)
+                        setForm({ ...form, tags: [...existing, ...toAdd].join(', ') })
                       }
-                      if (newTags !== form.tags) setForm({ ...form, tags: newTags })
                       setTagInput('')
                     } else if (e.key === 'Backspace' && !tagInput && form.tags) {
                       const tags = form.tags.split(',').map(s=>s.trim()).filter(Boolean)
                       tags.pop()
                       setForm({ ...form, tags: tags.join(', ') })
+                    } else if (e.key === 'Escape') {
+                      setTagInput('')
                     }
                   }}
                   onBlur={() => {
+                    if (!tagInput.trim()) return
                     const parts = tagInput.split(',').map(s=>s.trim()).filter(Boolean)
-                    let newTags = form.tags
-                    for (const val of parts) {
-                      if (val && !newTags.split(',').map(s=>s.trim()).includes(val)) {
-                        newTags = newTags ? `${newTags}, ${val}` : val
-                      }
+                    const existingLower = new Set(form.tags.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean))
+                    const toAdd = parts.filter((p) => !existingLower.has(p.toLowerCase()))
+                    if (toAdd.length) {
+                      const existing = form.tags.split(',').map(s=>s.trim()).filter(Boolean)
+                      setForm({ ...form, tags: [...existing, ...toAdd].join(', ') })
                     }
-                    if (newTags !== form.tags) setForm({ ...form, tags: newTags })
                     setTimeout(()=>setTagInput(''), 150)
                   }}
-                  placeholder={form.tags ? "Add more labels…" : "Type label + Enter — e.g. urgent, backend, ui"}
+                  placeholder={form.tags ? "Add more tags…" : "Type tag + Enter — e.g. urgent, backend, ui"}
                   className="flex-1 min-w-[120px] bg-transparent outline-none text-sm placeholder:text-muted-foreground py-1 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 border-0 shadow-none"
                 />
                 {(() => {
@@ -796,6 +818,7 @@ export function Tasks() {
                 })()}
               </div>
               <p className="text-[11px] font-medium text-muted-foreground">Press <span className="font-mono bg-muted px-1 py-0.5 rounded">Enter</span> or <span className="font-mono bg-muted px-1 py-0.5 rounded">,</span> to add • Click × to remove</p>
+            </div>
             </div>
           </div>
 
@@ -1133,44 +1156,74 @@ export function Tasks() {
                     </div>
                   </div>
 
-                  {/* Tags — inline edit with auto-save on blur/Enter */}
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <label htmlFor="field-tags" className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-foreground">
-                      <Tag className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" /> Tags
+                  {/* Tags — multi-add, same as Labels, beside Assigned To */}
+                  <div className="space-y-1.5">
+                    <label htmlFor="field-tags" className="flex items-center justify-between gap-2 text-xs font-semibold tracking-wide text-foreground">
+                      <span className="flex items-center gap-1.5"><Tag className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" /> Tags</span>
+                      <span className="text-[11px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{parseDrawerTags(tagsDraft).length} selected</span>
                     </label>
-                    {tagsEditing ? (
-                      <div className="flex gap-2">
-                        <input
-                          id="field-tags"
-                          value={tagsDraft}
-                          onChange={(e) => setTagsDraft(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') { e.preventDefault(); void saveTags() }
-                            if (e.key === 'Escape') { setTagsDraft(selected.tags?.join(', ') ?? ''); setTagsEditing(false) }
-                          }}
-                          onBlur={() => void saveTags()}
-                          placeholder="comma separated"
-                          className="input flex-1 cursor-text"
-                          autoFocus
-                        />
-                        <button type="button" onClick={() => void saveTags()} className="btn btn-primary btn-sm shrink-0"><Save className="h-3.5 w-3.5" /></button>
-                        <button type="button" onClick={() => { setTagsDraft(selected.tags?.join(', ') ?? ''); setTagsEditing(false) }} className="btn btn-ghost btn-sm shrink-0"><X className="h-3.5 w-3.5" /></button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => { setTagsDraft(selected.tags?.join(', ') ?? ''); setTagsEditing(true) }}
-                        className="flex w-full flex-wrap gap-1.5 rounded-xl border border-border bg-card px-3 py-2.5 text-left hover:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer min-h-[44px] items-center"
-                      >
-                        {selected.tags?.length ? (
-                          selected.tags.map((tag: string) => (
-                            <span key={tag} className="badge badge-muted font-normal"><Tag className="mr-1 h-3 w-3" />{tag}</span>
-                          ))
-                        ) : (
-                          <span className="text-sm text-muted-foreground">Click to add tags — comma separated</span>
-                        )}
-                      </button>
-                    )}
+                    <div className="group relative flex flex-wrap gap-1.5 p-2.5 rounded-xl border border-border bg-card min-h-[48px] focus-within:border-border focus-within:ring-0 focus-within:ring-offset-0 hover:border-border transition-all shadow-sm">
+                      {parseDrawerTags(tagsDraft).map((t) => {
+                        const colors: Record<string,string> = {
+                          bug: 'bg-red-500 text-white border-red-600',
+                          feature: 'bg-blue-500 text-white border-blue-600',
+                          urgent: 'bg-amber-500 text-white border-amber-600',
+                          enhancement: 'bg-emerald-500 text-white border-emerald-600',
+                        }
+                        const cls = colors[t.toLowerCase()] || 'bg-primary text-white border-primary'
+                        return (
+                          <span key={t} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold shadow-sm hover:shadow-md hover:scale-[1.02] transition-all ${cls}`}>
+                            {t}
+                            <button type="button" onClick={() => removeDrawerTag(t)} className="ml-0.5 rounded-full bg-white/20 hover:bg-white/30 p-0.5 -mr-1" aria-label={`Remove tag ${t}`}>
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        )
+                      })}
+                      <input
+                        id="field-tags"
+                        value={drawerTagInput}
+                        onChange={(e) => setDrawerTagInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ',') {
+                            e.preventDefault()
+                            addDrawerTagsFromInput(drawerTagInput)
+                          } else if (e.key === 'Backspace' && !drawerTagInput && tagsDraft) {
+                            const tags = parseDrawerTags(tagsDraft)
+                            tags.pop()
+                            void commitDrawerTags(tags.join(', '))
+                          } else if (e.key === 'Escape') {
+                            setDrawerTagInput('')
+                          }
+                        }}
+                        onBlur={() => {
+                          if (drawerTagInput.trim()) addDrawerTagsFromInput(drawerTagInput)
+                        }}
+                        placeholder={parseDrawerTags(tagsDraft).length ? "Add more tags…" : "Type tag + Enter — e.g. urgent, backend, ui"}
+                        className="flex-1 min-w-[120px] bg-transparent outline-none text-sm placeholder:text-muted-foreground py-1 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 border-0 shadow-none"
+                      />
+                      {(() => {
+                        const suggested = ['bug','feature','enhancement','urgent','backend','frontend','ui','api','design','docs','critical','high','low']
+                        const existingLower = new Set(parseDrawerTags(tagsDraft).map(t=>t.toLowerCase()))
+                        const filtered = drawerTagInput ? suggested.filter(s => s.toLowerCase().includes(drawerTagInput.toLowerCase()) && !existingLower.has(s.toLowerCase())).slice(0,5) : []
+                        if (!filtered.length) return null
+                        return (
+                          <div className="absolute left-0 top-full mt-2 z-10 w-48 rounded-xl border border-border bg-card shadow-lg p-1">
+                            {filtered.map(s => (
+                              <button
+                                key={s}
+                                type="button"
+                                onMouseDown={(e)=>{ e.preventDefault(); addDrawerTagsFromInput(s) }}
+                                className="w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-primary hover:text-white transition-colors flex items-center gap-2"
+                              >
+                                <Tag className="w-3 h-3" /> {s}
+                              </button>
+                            ))}
+                          </div>
+                        )
+                      })()}
+                    </div>
+                    <p className="text-[11px] font-medium text-muted-foreground">Press <span className="font-mono bg-muted px-1 py-0.5 rounded">Enter</span> or <span className="font-mono bg-muted px-1 py-0.5 rounded">,</span> to add • Click × to remove • Auto-saves</p>
                   </div>
 
                   {/* Timestamps */}

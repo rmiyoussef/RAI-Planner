@@ -2,7 +2,8 @@
 set -e
 
 # RAI Planner — One-command dev launcher
-# Starts the backend (uvicorn :8000) in the background and the frontend (vite :5173) in the foreground.
+# Starts the backend (uvicorn :$BACKEND_PORT) in the background and the frontend
+# (vite :$FRONTEND_PORT) in the foreground. Ports come from .env (see .env.example).
 # Ctrl+C stops both (backend is only stopped if this script started it).
 #
 # Usage:  ./start.sh        (or ./scripts/start.sh)
@@ -18,8 +19,14 @@ if [ ! -f ".env" ]; then
   exit 1
 fi
 
+BACKEND_PORT=$(grep -E "^BACKEND_PORT=" .env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
+[ -z "$BACKEND_PORT" ] && BACKEND_PORT="8000"
+FRONTEND_PORT=$(grep -E "^FRONTEND_PORT=" .env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
+[ -z "$FRONTEND_PORT" ] && FRONTEND_PORT="5173"
+export BACKEND_PORT FRONTEND_PORT
+
 BACKEND_PID=""
-BACKEND_URL="http://127.0.0.1:8000/api/health"
+BACKEND_URL="http://127.0.0.1:${BACKEND_PORT}/api/health"
 
 # Ensure PostgreSQL is running (local dev, port 5433, data in ./pgdata)
 if ! /usr/lib/postgresql/18/bin/pg_isready -h 127.0.0.1 -p 5433 -U rami -d rai_planner >/dev/null 2>&1; then
@@ -37,10 +44,10 @@ if ! /usr/lib/postgresql/18/bin/pg_isready -h 127.0.0.1 -p 5433 -U rami -d rai_p
 fi
 
 if curl -sf -m 2 "$BACKEND_URL" >/dev/null 2>&1; then
-  echo "→ Backend already running on :8000 (leaving it alone)"
+  echo "→ Backend already running on :${BACKEND_PORT} (leaving it alone)"
 else
-  echo "→ Starting backend on :8000 (hot-reload enabled) ..."
-  ( cd backend && nohup .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir "$ROOT/backend/app" > "$ROOT/logs/backend.log" 2>&1 & echo $! > "$ROOT/logs/backend.pid" )
+  echo "→ Starting backend on :${BACKEND_PORT} (hot-reload enabled) ..."
+  ( cd backend && nohup .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT" --reload --reload-dir "$ROOT/backend/app" > "$ROOT/logs/backend.log" 2>&1 & echo $! > "$ROOT/logs/backend.pid" )
   BACKEND_PID=$(cat "$ROOT/logs/backend.pid")
   for i in $(seq 1 20); do
     if curl -sf -m 2 "$BACKEND_URL" >/dev/null 2>&1; then break; fi
@@ -63,6 +70,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "→ Starting frontend on http://localhost:5173 (Ctrl+C to stop)"
+echo "→ Starting frontend on http://localhost:${FRONTEND_PORT} (Ctrl+C to stop)"
 cd frontend
-exec npm run dev
+exec npm run dev -- --port "$FRONTEND_PORT"

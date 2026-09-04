@@ -142,7 +142,7 @@ export function FilterBar({
                       ['title', 'Title'],
                       ['module', 'Module'],
                       ['assignees', 'Assignees'],
-                      ['labels', 'Labels'],
+                      ['labels', 'Tags'],
                       ['status', 'Status'],
                       ['iteration', 'Iteration'],
                       ['created_at', 'Created'],

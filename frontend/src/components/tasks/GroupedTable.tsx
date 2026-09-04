@@ -28,7 +28,7 @@ const COL_DEFS: Record<string, ColDef> = {
   task_type: { key: 'task_type', label: 'Type', width: 110, icon: Tag },
   module: { key: 'module', label: 'Module', width: 148, icon: FolderKanban },
   assignees: { key: 'assignees', label: 'Assignees', width: 160, icon: Users },
-  labels: { key: 'labels', label: 'Labels', width: 160, icon: Tag },
+  labels: { key: 'labels', label: 'Tags', width: 160, icon: Tag },
   status: { key: 'status', label: 'Status', width: 150, icon: Layers },
   iteration: { key: 'iteration', label: 'Iteration', width: 138 },
   created_at: { key: 'created_at', label: 'Created', width: 122, icon: Calendar },

@@ -395,7 +395,7 @@ export function Home() {
               Home Dashboard
             </h1>
           </div>
-          <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+          <p className="max-w-none text-sm leading-relaxed text-muted-foreground sm:whitespace-nowrap">
             Monitor performance, track project health and stay ahead of delivery — built for decisive business owners.
           </p>
         </div>

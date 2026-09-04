@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
 import {
   LayoutDashboard,
@@ -13,53 +13,200 @@ import {
   AlertCircle,
   Loader2,
   TrendingUp,
+  TrendingDown,
+  Minus,
+  Gauge,
 } from 'lucide-react'
 
 type Granularity = 'daily' | 'weekly' | 'monthly'
 
 type BarDatum = { date: string; count: number }
+type TrendPoint = { key: string; label: string; count: number }
 
-function SimpleBar({
-  data,
-  colorClass = 'bg-primary',
-}: {
-  data: BarDatum[]
-  colorClass?: string
-}) {
-  if (!data.length) {
-    return (
-      <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 px-4 py-6">
-        <p className="text-sm font-medium text-muted-foreground">No data available</p>
-      </div>
-    )
+const PERIOD_COUNT: Record<Granularity, number> = { daily: 14, weekly: 12, monthly: 12 }
+const PERIOD_NOUN: Record<Granularity, string> = { daily: 'day', weekly: 'week', monthly: 'month' }
+
+function pad2(n: number) {
+  return String(n).padStart(2, '0')
+}
+
+function isoWeekKey(d: Date): string {
+  // ISO week key YYYY-Www from a UTC date
+  const tmp = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
+  const day = (tmp.getUTCDay() + 6) % 7 // Mon=0
+  tmp.setUTCDate(tmp.getUTCDate() - day + 3) // Thursday of this week
+  const firstThursday = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 4))
+  const fday = (firstThursday.getUTCDay() + 6) % 7
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - fday + 3)
+  const week = 1 + Math.round((tmp.getTime() - firstThursday.getTime()) / (7 * 86400000))
+  return `${tmp.getUTCFullYear()}-W${pad2(week)}`
+}
+
+function buildKeys(gran: Granularity, now = new Date()): string[] {
+  const n = PERIOD_COUNT[gran]
+  const keys: string[] = []
+  if (gran === 'daily') {
+    for (let i = n - 1; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * 86400000)
+      keys.push(`${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`)
+    }
+  } else if (gran === 'weekly') {
+    // start from Monday of current ISO week
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+    const day = (today.getUTCDay() + 6) % 7
+    const monday = new Date(today.getTime() - day * 86400000)
+    for (let i = n - 1; i >= 0; i--) {
+      keys.push(isoWeekKey(new Date(monday.getTime() - i * 7 * 86400000)))
+    }
+  } else {
+    const y = now.getUTCFullYear()
+    const m = now.getUTCMonth()
+    for (let i = n - 1; i >= 0; i--) {
+      const d = new Date(Date.UTC(y, m - i, 1))
+      keys.push(`${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}`)
+    }
   }
+  return keys
+}
 
-  const max = Math.max(...data.map((d) => d.count), 1)
+function formatBucketLabel(key: string, gran: Granularity): string {
+  try {
+    if (gran === 'daily') {
+      return new Date(`${key}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+    }
+    if (gran === 'monthly') {
+      return new Date(`${key}-01T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' })
+    }
+    return key.replace('-W', ' W')
+  } catch {
+    return key
+  }
+}
+
+function buildSeries(raw: BarDatum[] | undefined, gran: Granularity): TrendPoint[] {
+  const map = new Map<string, number>()
+  for (const d of raw ?? []) map.set(d.date, (map.get(d.date) ?? 0) + d.count)
+  return buildKeys(gran).map((key) => ({ key, label: formatBucketLabel(key, gran), count: map.get(key) ?? 0 }))
+}
+
+function summarize(series: TrendPoint[]) {
+  const total = series.reduce((s, p) => s + p.count, 0)
+  const avg = series.length ? total / series.length : 0
+  const peak = series.reduce<TrendPoint>((best, p) => (p.count > best.count ? p : best), { key: '', label: '—', count: 0 })
+  const last = series.length ? series[series.length - 1].count : 0
+  const prev = series.length > 1 ? series[series.length - 2].count : 0
+  const deltaPct = prev === 0 ? (last > 0 ? 100 : 0) : ((last - prev) / prev) * 100
+  return { total, avg, peak, last, prev, deltaPct }
+}
+
+function DeltaBadge({ deltaPct, noun }: { deltaPct: number; noun: string }) {
+  const flat = Math.abs(deltaPct) < 0.5
+  if (flat)
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+        <Minus className="h-3 w-3" aria-hidden="true" /> flat vs prev {noun}
+      </span>
+    )
+  const up = deltaPct > 0
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${
+        up
+          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-900'
+          : 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900'
+      }`}
+    >
+      {up ? <TrendingUp className="h-3 w-3" aria-hidden="true" /> : <TrendingDown className="h-3 w-3" aria-hidden="true" />}
+      {up ? '+' : ''}{Math.round(deltaPct)}% vs prev {noun}
+    </span>
+  )
+}
+
+function Kpi({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/50 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+      <span className="uppercase tracking-wide">{label}</span>
+      <span className="font-bold tabular-nums text-foreground">{value}</span>
+    </span>
+  )
+}
+
+function TrendChart({
+  series,
+  barClass,
+  label = 'Trend',
+}: {
+  series: TrendPoint[]
+  barClass: string
+  label?: string
+}) {
+  const max = Math.max(...series.map((p) => p.count), 1)
+  const peakCount = Math.max(...series.map((p) => p.count), 0)
+  const allZero = peakCount === 0
+  // sparse x labels: first, middle, last (plus peak if distinct)
+  const labelIdx = new Set<number>([0, Math.floor((series.length - 1) / 2), series.length - 1])
+  const peakIdx = series.findIndex((p) => p.count === peakCount && peakCount > 0)
+  if (peakIdx >= 0) labelIdx.add(peakIdx)
 
   return (
-    <div className="space-y-3" role="img" aria-label="Bar chart">
-      {data.map((d) => (
-        <div
-          key={d.date}
-          className="flex items-center gap-3"
-        >
-          <span className="w-20 shrink-0 truncate text-right text-xs font-medium text-muted-foreground sm:w-24">
-            {d.date}
-          </span>
-          <div className="flex flex-1 items-center gap-3">
-            <div className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
-              <div
-                className={`absolute inset-y-0 left-0 rounded-full transition-all duration-500 ease-out motion-reduce:transition-none ${colorClass}`}
-                style={{ width: `${(d.count / max) * 100}%` }}
-                aria-hidden="true"
-              />
+    <div>
+      <div className="flex h-36 items-end gap-1.5" role="img" aria-label={label}>
+        {series.map((p, i) => {
+          const isPeak = p.count === peakCount && peakCount > 0
+          const h = p.count === 0 ? 3 : Math.max(8, Math.round((p.count / max) * 128))
+          return (
+            <div key={p.key} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-1 self-stretch" title={`${p.label}: ${p.count}`}>
+              <span className={`text-[10px] font-bold tabular-nums ${isPeak ? 'text-foreground' : 'text-transparent'} select-none`} aria-hidden="true">
+                {p.count}
+              </span>
+              <div className="flex w-full flex-1 items-end">
+                <div
+                  className={`w-full rounded-t-md transition-all duration-500 ease-out motion-reduce:transition-none ${
+                    p.count === 0 ? 'bg-border' : `${barClass}${isPeak ? ' ring-1 ring-black/10 dark:ring-white/20' : ' opacity-80'}`
+                  }`}
+                  style={{ height: p.count === 0 ? 3 : h }}
+                  aria-hidden="true"
+                />
+              </div>
+              <span className={`truncate text-[10px] font-medium ${labelIdx.has(i) ? 'text-muted-foreground' : 'text-transparent'} select-none`} aria-hidden={!(labelIdx.has(i))}>
+                {p.label}
+              </span>
             </div>
-            <span className="w-8 shrink-0 text-right text-xs font-semibold tabular-nums text-foreground">
-              {d.count}
-            </span>
-          </div>
-        </div>
-      ))}
+          )
+        })}
+      </div>
+      {allZero && (
+        <p className="mt-2 text-center text-xs font-medium text-muted-foreground">No activity in this window — zeros shown so gaps aren’t hidden.</p>
+      )}
+    </div>
+  )
+}
+
+function ThroughputChart({ created, completed }: { created: TrendPoint[]; completed: TrendPoint[] }) {
+  const max = Math.max(...created.map((p) => p.count), ...completed.map((p) => p.count), 1)
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-4 text-[11px] font-semibold text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" aria-hidden="true" /> Created</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-amber-500" aria-hidden="true" /> Completed</span>
+      </div>
+      <div className="flex h-36 items-end gap-1.5" role="img" aria-label="Created versus completed">
+        {created.map((p, i) => {
+          const c = completed[i]?.count ?? 0
+          const h1 = p.count === 0 ? 3 : Math.max(8, Math.round((p.count / max) * 128))
+          const h2 = c === 0 ? 3 : Math.max(8, Math.round((c / max) * 128))
+          return (
+            <div key={p.key} className="flex min-w-0 flex-1 items-end justify-center gap-0.5 self-stretch" title={`${p.label} — created ${p.count}, completed ${c}`}>
+              <div className={`w-full rounded-t-md ${p.count === 0 ? 'bg-border' : 'bg-emerald-500 opacity-90'}`} style={{ height: p.count === 0 ? 3 : h1 }} aria-hidden="true" />
+              <div className={`w-full rounded-t-md ${c === 0 ? 'bg-border' : 'bg-amber-500 opacity-90'}`} style={{ height: c === 0 ? 3 : h2 }} aria-hidden="true" />
+            </div>
+          )
+        })}
+      </div>
+      <div className="mt-1 flex justify-between text-[10px] font-medium text-muted-foreground">
+        <span className="truncate">{created[0]?.label}</span>
+        <span className="truncate">{created[created.length - 1]?.label}</span>
+      </div>
     </div>
   )
 }
@@ -158,6 +305,33 @@ export function Home() {
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
   }, [gran])
+
+  // Zero-filled timelines so gaps are visible (no backend change)
+  const createdSeries = useMemo(() => buildSeries(data?.tasks_created_over_time as BarDatum[] | undefined, gran), [data, gran])
+  const completedSeries = useMemo(() => buildSeries(data?.tasks_completed_over_time as BarDatum[] | undefined, gran), [data, gran])
+  const projectsSeries = useMemo(() => buildSeries(data?.projects_created_over_time as BarDatum[] | undefined, gran), [data, gran])
+  const createdSum = useMemo(() => summarize(createdSeries), [createdSeries])
+  const completedSum = useMemo(() => summarize(completedSeries), [completedSeries])
+  const projectsSum = useMemo(() => summarize(projectsSeries), [projectsSeries])
+  // Portfolio running total ending at the current size (flat = no new workspaces)
+  const portfolioSeries: TrendPoint[] = useMemo(() => {
+    let run = Math.max(0, (data?.projects_total ?? 0) - projectsSeries.reduce((s, p) => s + p.count, 0))
+    return projectsSeries.map((p) => {
+      run += p.count
+      return { ...p, count: run }
+    })
+  }, [data, projectsSeries])
+
+  const windowLabel = gran === 'daily' ? 'Last 14 days' : gran === 'weekly' ? 'Last 12 weeks' : 'Last 12 months'
+  const noun = PERIOD_NOUN[gran]
+  const completionRate = createdSum.total ? Math.round((completedSum.total / createdSum.total) * 100) : completedSum.total > 0 ? 100 : 0
+  const netFlow = createdSum.total - completedSum.total
+  const throughputInsight =
+    createdSum.total === 0 && completedSum.total === 0
+      ? `No task movement in ${windowLabel.toLowerCase()} — create work or close reviews to see flow.`
+      : `Completed ${completedSum.total} of ${createdSum.total} created (${completionRate}%) — backlog ${
+          netFlow > 0 ? `grew by ${netFlow}` : netFlow < 0 ? `shrank by ${-netFlow}` : 'unchanged'
+        }.`
 
   if (loading) {
     return (
@@ -329,44 +503,95 @@ export function Home() {
         </div>
       </section>
 
-      {/* Charts */}
+      {/* Trends — throughput + per-metric detail with KPIs */}
       <section className="space-y-4" aria-label="Trends">
         <div className="card">
-          <div className="mb-5 flex items-center gap-2">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-white shadow-sm" aria-hidden="true">
-              <BarChart3 className="h-4 w-4" />
+              <Gauge className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold tracking-tight text-foreground">
-                Projects Created Over Time
-              </h3>
-              <p className="text-xs font-medium capitalize text-muted-foreground">{gran} granularity</p>
+              <h3 className="text-sm font-semibold tracking-tight text-foreground">Delivery Throughput</h3>
+              <p className="text-xs font-medium text-muted-foreground">Created vs completed • {windowLabel}</p>
             </div>
-            <TrendingUp className="ml-auto h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <div className="ml-auto">
+              <DeltaBadge deltaPct={completedSum.deltaPct} noun={noun} />
+            </div>
           </div>
-          <SimpleBar data={data.projects_created_over_time ?? []} colorClass="bg-primary" />
+          <div className="mb-4 flex flex-wrap gap-1.5">
+            <Kpi label="Created" value={String(createdSum.total)} />
+            <Kpi label="Completed" value={String(completedSum.total)} />
+            <Kpi label="Completion" value={`${completionRate}%`} />
+            <Kpi label="Backlog Δ" value={`${netFlow > 0 ? '+' : ''}${netFlow}`} />
+          </div>
+          <ThroughputChart created={createdSeries} completed={completedSeries} />
+          <p className="mt-3 text-xs font-medium text-muted-foreground">{throughputInsight}</p>
         </div>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="card">
-            <div className="mb-5 flex items-center gap-2">
+            <div className="mb-4 flex flex-wrap items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500 text-white shadow-sm" aria-hidden="true">
                 <BarChart3 className="h-4 w-4" />
               </div>
-              <h3 className="text-sm font-semibold tracking-tight text-foreground">Tasks Created Over Time</h3>
+              <div>
+                <h3 className="text-sm font-semibold tracking-tight text-foreground">Tasks Created</h3>
+                <p className="text-xs font-medium text-muted-foreground">{windowLabel} • inflow</p>
+              </div>
+              <div className="ml-auto">
+                <DeltaBadge deltaPct={createdSum.deltaPct} noun={noun} />
+              </div>
             </div>
-            <SimpleBar data={data.tasks_created_over_time ?? []} colorClass="bg-emerald-500" />
+            <div className="mb-4 flex flex-wrap gap-1.5">
+              <Kpi label="Total" value={String(createdSum.total)} />
+              <Kpi label={`Avg/${noun}`} value={createdSum.avg.toFixed(1)} />
+              <Kpi label="Peak" value={createdSum.total ? `${createdSum.peak.count} (${createdSum.peak.label})` : '—'} />
+            </div>
+            <TrendChart series={createdSeries} barClass="bg-emerald-500" label="Tasks created trend" />
           </div>
 
           <div className="card">
-            <div className="mb-5 flex items-center gap-2">
+            <div className="mb-4 flex flex-wrap items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500 text-white shadow-sm" aria-hidden="true">
-                <BarChart3 className="h-4 w-4" />
+                <CheckCircle2 className="h-4 w-4" />
               </div>
-              <h3 className="text-sm font-semibold tracking-tight text-foreground">Tasks Completed Over Time</h3>
+              <div>
+                <h3 className="text-sm font-semibold tracking-tight text-foreground">Tasks Completed</h3>
+                <p className="text-xs font-medium text-muted-foreground">{windowLabel} • output</p>
+              </div>
+              <div className="ml-auto">
+                <DeltaBadge deltaPct={completedSum.deltaPct} noun={noun} />
+              </div>
             </div>
-            <SimpleBar data={data.tasks_completed_over_time ?? []} colorClass="bg-amber-500" />
+            <div className="mb-4 flex flex-wrap gap-1.5">
+              <Kpi label="Total" value={String(completedSum.total)} />
+              <Kpi label={`Avg/${noun}`} value={completedSum.avg.toFixed(1)} />
+              <Kpi label="Peak" value={completedSum.total ? `${completedSum.peak.count} (${completedSum.peak.label})` : '—'} />
+            </div>
+            <TrendChart series={completedSeries} barClass="bg-amber-500" label="Tasks completed trend" />
           </div>
+        </div>
+
+        <div className="card">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-light text-primary dark:bg-blue-950/50 dark:text-blue-300" aria-hidden="true">
+              <FolderKanban className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold tracking-tight text-foreground">Portfolio Growth</h3>
+              <p className="text-xs font-medium text-muted-foreground">Running project total • +{projectsSum.total} in window</p>
+            </div>
+            <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
+              {data.projects_total ?? 0} total
+            </span>
+          </div>
+          <div className="mb-4 flex flex-wrap gap-1.5">
+            <Kpi label="Added" value={String(projectsSum.total)} />
+            <Kpi label={`Avg/${noun}`} value={projectsSum.avg.toFixed(1)} />
+            <Kpi label="Total" value={String(data.projects_total ?? 0)} />
+          </div>
+          <TrendChart series={portfolioSeries} barClass="bg-primary" label="Portfolio growth" />
+          <p className="mt-3 text-xs font-medium text-muted-foreground">Flat means no new workspaces — growth only moves when projects are created.</p>
         </div>
       </section>
     </div>

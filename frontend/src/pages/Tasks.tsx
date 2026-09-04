@@ -617,7 +617,7 @@ export function Tasks() {
             <div className="space-y-2">
               <label htmlFor="task-title" className="flex items-center gap-2 text-sm font-semibold">
                 <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600"><Hash className="h-3.5 w-3.5" aria-hidden="true" /></span>
-                Task Title <span className="text-destructive">*</span>
+                Title <span className="text-destructive">*</span>
               </label>
               <input
                 id="task-title"
@@ -654,7 +654,7 @@ export function Tasks() {
             <div className="space-y-2">
               <label htmlFor="task-type" className="flex items-center gap-2 text-sm font-semibold">
                 <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600"><Tag className="h-3.5 w-3.5" aria-hidden="true" /></span>
-                Task Type
+                Type
               </label>
               <div className="relative">
                 <select
@@ -1099,9 +1099,9 @@ export function Tasks() {
                     </div>
                   </div>
 
-                  {/* Task Type — auto-save */}
+                  {/* Type — auto-save */}
                   <div className="space-y-1.5">
-                    <label htmlFor="field-tasktype" className="text-xs font-semibold tracking-wide text-foreground">Task Type</label>
+                    <label htmlFor="field-tasktype" className="text-xs font-semibold tracking-wide text-foreground">Type</label>
                     <div className="relative">
                       <select
                         id="field-tasktype"

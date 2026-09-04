@@ -10,6 +10,16 @@ from app.services.filesystem import validate_project_path, collect_project_conte
 
 logger = logging.getLogger(__name__)
 
+# Live per-task generation progress (in-memory; tiny, overwritten each run).
+# Shape: {"status": "idle"|"running"|"done"|"error", "stage": int 0..6, "detail": str}
+# Stages map to the frontend GENERATING_STAGES list; stage == 6 means all done.
+_generation_progress: dict[str, dict] = {}
+
+def get_generation_progress(owner_id: str, task_id: str) -> dict:
+    return _generation_progress.get(
+        f"{owner_id}:{task_id}", {"status": "idle", "stage": 0, "detail": ""}
+    )
+
 class SmartEngineeringAgent:
     def __init__(self):
         self.state = "idle"
@@ -79,10 +89,19 @@ class SmartEngineeringAgent:
         await self.start()
         return await self.get_status(owner_id="system")  # placeholder
 
+    def _set_progress(self, owner_id: str, task_id: str, stage: int, status: str = "running", detail: str = ""):
+        _generation_progress[f"{owner_id}:{task_id}"] = {
+            "status": status,
+            "stage": stage,
+            "detail": detail,
+            "updated_at": utc_now(),
+        }
+
     async def generate_task(self, owner_id: str, task_id: str) -> dict:
         """Main workflow 16 steps. Returns generated markdown."""
         self.state = "running"
         self.last_activity = utc_now()
+        self._set_progress(owner_id, task_id, 0, "running", "Loading task")
         started_at = datetime.now(timezone.utc)
         run_id = new_id()
         runs_col = get_collection("agent_runs")
@@ -119,6 +138,7 @@ class SmartEngineeringAgent:
             if not valid:
                 raise ValueError(f"Project path error: {msg}")
             # 5-6 inspect .brain/context
+            self._set_progress(owner_id, task_id, 1, "running", "Scanning project files & .brain")
             context = collect_project_context(project_path)
             # 7 load AI config
             ai_col = get_collection("ai_configs")
@@ -139,13 +159,20 @@ class SmartEngineeringAgent:
             # 9 skills
             skills_text = await self.skill_manager.enabled_skills_text(owner_id)
             # 10 build prompts
+            self._set_progress(owner_id, task_id, 2, "running", "Building context & prompt")
             pm = PromptManager(system_prompt)
             user_prompt = pm.build_user_prompt(task, project, context, skills_text)
             # 11-13 generate
             # ensure agent is considered running
             if not self.is_running:
                 await self.start()
-            markdown = await self.ai_provider.generate(owner_id, system_prompt, user_prompt)
+            self._set_progress(owner_id, task_id, 3, "running", "Analyzing task")
+            def _provider_cb(msg: str):
+                self._set_progress(owner_id, task_id, 4, "running", msg)
+            markdown = await self.ai_provider.generate(
+                owner_id, system_prompt, user_prompt, on_progress=_provider_cb
+            )
+            self._set_progress(owner_id, task_id, 5, "running", "Saving new version")
             # 14 save as new version
             # update task description
             new_version = task.get("version", 1) + 1
@@ -211,6 +238,7 @@ class SmartEngineeringAgent:
             self.state = "idle"
             self.last_success = completed.isoformat()
             self.last_activity = utc_now()
+            self._set_progress(owner_id, task_id, 6, "done", "Saved")
             # fetch updated task
             updated = await tasks_col.find_one({"_id": task_id})
             return {"markdown": markdown, "task": updated, "run_id": run_id}
@@ -242,6 +270,10 @@ class SmartEngineeringAgent:
             self.state = "failed"
             self.last_error = err_msg[:500]
             self.last_activity = utc_now()
+            try:
+                cur_stage = get_generation_progress(owner_id, task_id).get("stage", 0)
+                self._set_progress(owner_id, task_id, cur_stage, "error", err_msg[:200])
+            except: pass
             raise
 
 # global singleton

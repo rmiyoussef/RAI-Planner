@@ -56,6 +56,8 @@ export function Settings() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [loadingAgent, setLoadingAgent] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{ ok: boolean; latency_ms?: number; sample?: string; error?: string } | null>(null)
 
   async function loadAI() {
     try {
@@ -207,6 +209,20 @@ export function Settings() {
       flashError(e)
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function testAI() {
+    setTesting(true)
+    setTestResult(null)
+    setError('')
+    try {
+      const res = await api.post('/settings/ai-config/test', {})
+      setTestResult({ ok: true, latency_ms: res.latency_ms, sample: res.sample })
+    } catch (e: any) {
+      setTestResult({ ok: false, error: e.message || 'Connection test failed.' })
+    } finally {
+      setTesting(false)
     }
   }
 
@@ -652,15 +668,51 @@ export function Settings() {
                   </div>
                 </div>
 
+                {testResult && (
+                  <div
+                    role={testResult.ok ? 'status' : 'alert'}
+                    className={`flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm ${
+                      testResult.ok
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200'
+                        : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-300'
+                    }`}
+                  >
+                    {testResult.ok ? (
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                    ) : (
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      {testResult.ok ? (
+                        <p className="font-medium break-words">
+                          Connected in {testResult.latency_ms}ms
+                          {testResult.sample ? <span className="font-normal"> — reply: “{testResult.sample}”</span> : null}
+                        </p>
+                      ) : (
+                        <p className="font-medium break-words">{testResult.error}</p>
+                      )}
+                    </div>
+                    <button type="button" onClick={() => setTestResult(null)} className="shrink-0 cursor-pointer rounded-lg p-1 hover:bg-black/5 dark:hover:bg-white/10" aria-label="Dismiss test result">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-6 border-t border-border">
                   <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                     <Lock className="w-3.5 h-3.5" aria-hidden="true" />
                     Encrypted at rest • restarts agent on save
                   </p>
-                  <button type="button" onClick={saveAI} disabled={saving} className="btn btn-primary gap-2 h-11 px-6 shadow-sm shrink-0 disabled:opacity-50">
-                    {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
-                    Save & Restart Agent
-                  </button>
+                  <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+                    <button type="button" onClick={testAI} disabled={testing || saving} className="btn btn-outline gap-2 h-11 px-6 shrink-0 disabled:opacity-50">
+                      {testing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Activity className="h-4 w-4" aria-hidden="true" />}
+                      {testing ? 'Testing…' : 'Test connection'}
+                    </button>
+                    <button type="button" onClick={saveAI} disabled={saving} className="btn btn-primary gap-2 h-11 px-6 shadow-sm shrink-0 disabled:opacity-50">
+                      {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
+                      Save & Restart Agent
+                    </button>
+                  </div>
                 </div>
               </div>
           )}

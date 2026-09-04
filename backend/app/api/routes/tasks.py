@@ -265,6 +265,17 @@ async def list_activities(task_id: str, owner=Depends(get_current_owner)):
         id=d["_id"], task_id=d["task_id"], timestamp=d["timestamp"], action=d["action"], actor=d["actor"], changes=d.get("changes",[]), version=d.get("version",1)
     ) for d in items]
 
+@router.get("/{task_id}/generate/progress")
+async def generate_progress(task_id: str, request: Request, owner=Depends(get_current_owner)):
+    """Live per-stage progress of a running AI generation (polled by the UI)."""
+    from app.agents.smart_engineering_agent import get_generation_progress
+    rate_limit(request, "generate_progress", limit=60, window_seconds=60)
+    # verify task belongs to owner (no existence leak beyond 404)
+    doc = await get_collection("tasks").find_one({"_id": task_id, "owner_id": owner["_id"]})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return get_generation_progress(owner["_id"], task_id)
+
 @router.post("/{task_id}/generate")
 async def generate_task(task_id: str, owner=Depends(get_current_owner)):
     # check disabled state handled inside agent

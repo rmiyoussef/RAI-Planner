@@ -9,6 +9,7 @@ class ProjectCreate(BaseModel):
     project_path: str = Field(min_length=1, max_length=500)
     tags: List[str] = Field(default_factory=list)
     status: ProjectStatus = "active"
+    system_prompt: str = Field(default="", max_length=20000)
 
 class ProjectUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
@@ -16,6 +17,7 @@ class ProjectUpdate(BaseModel):
     project_path: Optional[str] = None
     tags: Optional[List[str]] = None
     status: Optional[ProjectStatus] = None
+    system_prompt: Optional[str] = Field(default=None, max_length=20000)
 
 class ProjectResponse(BaseModel):
     id: str
@@ -25,11 +27,19 @@ class ProjectResponse(BaseModel):
     project_path: str
     tags: List[str]
     status: str
+    system_prompt: str = ""
     created_at: str
     updated_at: str
     task_count: int = 0
     brain_available: bool = False
     brain_message: Optional[str] = None
+
+class SystemPromptUpdate(BaseModel):
+    system_prompt: str = Field(max_length=20000)
+
+class SystemPromptGenerateResponse(BaseModel):
+    system_prompt: str
+    analysis: dict = Field(default_factory=dict)
 
 class ProjectListResponse(BaseModel):
     items: List[ProjectResponse]

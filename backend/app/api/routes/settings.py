@@ -85,6 +85,37 @@ async def put_ai_config(payload: AIConfigRequest, request: Request, owner=Depend
     await agent.restart()
     return AIConfigResponse(provider_url=prov, model_name=model, api_key_masked=masked, has_key=bool(cfg.get("api_key_encrypted")), updated_at=cfg.get("updated_at"))
 
+@router.post("/ai-config/test")
+async def test_ai_config(request: Request, owner=Depends(get_current_owner)):
+    """Send a tiny probe completion through the configured provider.
+
+    Tries chat → responses → messages protocols automatically and reports
+    which chain worked, so owners can verify Settings → AI Configuration.
+    """
+    import time
+    from app.agents.ai_provider import AIProvider
+    rate_limit(request, "test_ai_config", limit=10, window_seconds=60)
+    provider = AIProvider()
+    cfg = await provider.get_config(owner["_id"])
+    if not cfg or not cfg.get("api_key_encrypted"):
+        raise HTTPException(status_code=400, detail="AI configuration missing: API key not set")
+    start = time.monotonic()
+    try:
+        out = await provider.generate(
+            owner["_id"],
+            "You are a connectivity probe. Reply with exactly: OK",
+            "ping",
+            max_tokens=60,
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except RuntimeError as re:
+        raise HTTPException(status_code=502, detail=str(re))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    latency_ms = int((time.monotonic() - start) * 1000)
+    return {"ok": True, "latency_ms": latency_ms, "sample": (out or "")[:200]}
+
 # Agent settings
 @router.get("/agent", response_model=AgentStatusResponse)
 async def get_agent_status(owner=Depends(get_current_owner)):

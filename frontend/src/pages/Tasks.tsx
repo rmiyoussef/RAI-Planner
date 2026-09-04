@@ -72,6 +72,8 @@ export function Tasks() {
   const [activities, setActivities] = useState<any[]>([])
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState('')
+  const [generateError, setGenerateError] = useState('')
+  const [generateElapsed, setGenerateElapsed] = useState(0)
   const [loading, setLoading] = useState(false)
 
   // Auto-save state
@@ -161,11 +163,20 @@ export function Tasks() {
       setTagsDraft(Array.isArray(selected.tags) ? selected.tags.join(', ') : (selected.tags ?? ''))
       setTitleEditing(false)
       setDrawerTagInput('')
+      setGenerateError('')
       setSaveStatus('idle')
       setDescSaveStatus('idle')
       setSaveError('')
     }
   }, [selected?.id])
+
+  // Elapsed timer while AI generation runs (slow models can take minutes)
+  useEffect(() => {
+    if (!generating) return
+    setGenerateElapsed(0)
+    const t = window.setInterval(() => setGenerateElapsed((s) => s + 1), 1000)
+    return () => window.clearInterval(t)
+  }, [generating])
 
   // Focus title input when editing starts
   useEffect(() => {
@@ -380,20 +391,49 @@ export function Tasks() {
     }
   }
 
+  const [genProgress, setGenProgress] = useState<{ stage: number; status: string; detail: string } | null>(null)
+  const genPollRef = useRef<number | null>(null)
+
+  function stopGenPoll() {
+    if (genPollRef.current) {
+      window.clearInterval(genPollRef.current)
+      genPollRef.current = null
+    }
+  }
+
   async function generate() {
     if (selected?.ai_generated) return
+    const taskId = selected.id
     setGenerating(true)
     setError('')
+    setGenerateError('')
+    setGenProgress({ stage: 0, status: 'running', detail: 'Starting…' })
+    // Poll live per-stage progress (display only — the POST below is source of truth)
+    const poll = async () => {
+      try {
+        const p = await api.get(`/tasks/${taskId}/generate/progress`)
+        setGenProgress({ stage: p.stage ?? 0, status: p.status ?? 'running', detail: p.detail ?? '' })
+        if (p.status === 'done' || p.status === 'error') stopGenPoll()
+      } catch {
+        // old backend or network blip — keep the generic animation
+      }
+    }
+    stopGenPoll()
+    void poll()
+    genPollRef.current = window.setInterval(() => void poll(), 1500)
     try {
-      const res = await api.post(`/tasks/${selected.id}/generate`, {})
+      const res = await api.post(`/tasks/${taskId}/generate`, {})
       const updated = res.task ?? res
       setSelected(updated)
-      setVersions(await api.get(`/tasks/${selected.id}/versions`))
-      setActivities(await api.get(`/tasks/${selected.id}/activities`))
+      setGenProgress({ stage: 6, status: 'done', detail: 'Saved' })
+      setVersions(await api.get(`/tasks/${taskId}/versions`))
+      setActivities(await api.get(`/tasks/${taskId}/activities`))
       load()
     } catch (e: any) {
+      setGenerateError(e.message || 'Generation failed. Please try again.')
       setError(e.message)
     } finally {
+      stopGenPoll()
       setGenerating(false)
     }
   }
@@ -1009,24 +1049,52 @@ export function Tasks() {
                     <div role="status" aria-live="polite" className="mt-4 rounded-2xl bg-black/25 p-4 ring-1 ring-white/20 backdrop-blur-md">
                       <div className="flex items-center gap-2 text-sm font-bold">
                         <Wand2 className="h-4 w-4 animate-pulse" aria-hidden="true" /> Engineering your task…
+                        <span className="ml-auto rounded-full bg-white/15 px-2 py-0.5 font-mono text-[11px] font-bold tabular-nums ring-1 ring-white/20">
+                          {generateElapsed}s
+                        </span>
                       </div>
+                      {(genProgress?.detail || genProgress?.status === 'error') && (
+                        <p className="mt-2 truncate text-xs font-medium text-white/85" title={genProgress?.detail}>
+                          {genProgress?.status === 'error' ? 'Failed: ' : '› '}{genProgress?.detail || 'Failed'}
+                        </p>
+                      )}
                       <ol className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                        {GENERATING_STAGES.map((stage, idx) => (
-                          <li
-                            key={stage}
-                            className="flex items-center gap-2 rounded-xl bg-white/10 px-2.5 py-1.5 text-xs font-medium text-white/90 ring-1 ring-white/15 motion-reduce:animate-none"
-                            style={{ animationDelay: `${idx * 120}ms` }}
-                          >
-                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[10px] font-bold text-violet-700">
-                              {idx + 1}
-                            </span>
-                            <span className="truncate">{stage}</span>
-                            <span className="ml-auto h-1.5 w-1.5 shrink-0 animate-ping rounded-full bg-white/80" aria-hidden="true" />
-                          </li>
-                        ))}
+                        {GENERATING_STAGES.map((stage, idx) => {
+                          const cur = genProgress?.stage ?? 0
+                          const finished = genProgress?.status === 'done' || idx < cur
+                          const active = genProgress?.status !== 'done' && genProgress?.status !== 'error' && idx === cur
+                          const failed = genProgress?.status === 'error' && idx === cur
+                          return (
+                            <li
+                              key={stage}
+                              className={`flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-medium ring-1 motion-reduce:animate-none ${
+                                finished
+                                  ? 'bg-emerald-400/20 text-white ring-emerald-200/30'
+                                  : active
+                                    ? 'bg-white/15 text-white ring-white/30'
+                                    : failed
+                                      ? 'bg-red-400/20 text-white ring-red-200/30'
+                                      : 'bg-white/10 text-white/55 ring-white/15'
+                              }`}
+                            >
+                              <span
+                                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                                  finished ? 'bg-emerald-300 text-emerald-900' : failed ? 'bg-red-300 text-red-900' : 'bg-white text-violet-700'
+                                }`}
+                              >
+                                {finished ? <Check className="h-3 w-3" aria-hidden="true" /> : failed ? <X className="h-3 w-3" aria-hidden="true" /> : idx + 1}
+                              </span>
+                              <span className="truncate">{stage}</span>
+                              {active && <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />}
+                            </li>
+                          )
+                        })}
                       </ol>
                       <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/20">
-                        <div className="shimmer h-full w-2/3 rounded-full bg-gradient-to-r from-white via-violet-200 to-white" />
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-white via-violet-200 to-white transition-all duration-500 motion-reduce:transition-none"
+                          style={{ width: `${Math.min(100, Math.round(((genProgress?.stage ?? 0) / GENERATING_STAGES.length) * 100))}%` }}
+                        />
                       </div>
                       <p className="mt-2 text-[11px] font-medium text-white/70">Please keep this open — saving a new version on finish.</p>
                     </div>
@@ -1050,6 +1118,13 @@ export function Tasks() {
                         </p>
                       )}
                     </div>
+                  )}
+
+                  {generateError && !generating && (
+                    <p role="alert" className="mt-3 flex items-start gap-1.5 rounded-xl bg-red-500/20 px-3 py-2 text-xs font-medium leading-relaxed text-white ring-1 ring-white/30">
+                      <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <span className="break-words">{generateError}</span>
+                    </p>
                   )}
 
                   {selected.ai_generated && !generating && (

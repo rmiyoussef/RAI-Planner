@@ -86,10 +86,9 @@ export function Tasks() {
   const [titleDraft, setTitleDraft] = useState('')
   const titleInputRef = useRef<HTMLInputElement>(null)
 
-  // Description editing
+  // Description editing (manual save)
   const [descDraft, setDescDraft] = useState('')
   const [descSaveStatus, setDescSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const descTimeoutRef = useRef<number | null>(null)
 
   // Tags editing (multi-add, same as Labels)
   const [tagsDraft, setTagsDraft] = useState('')
@@ -98,6 +97,10 @@ export function Tasks() {
   // Delete confirmation
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  // Collapsible bottom sections (collapsed by default)
+  const [activityOpen, setActivityOpen] = useState(false)
+  const [versionsOpen, setVersionsOpen] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -164,6 +167,8 @@ export function Tasks() {
       setTitleEditing(false)
       setDrawerTagInput('')
       setGenerateError('')
+      setActivityOpen(false)
+      setVersionsOpen(false)
       setSaveStatus('idle')
       setDescSaveStatus('idle')
       setSaveError('')
@@ -185,20 +190,6 @@ export function Tasks() {
       titleInputRef.current.select()
     }
   }, [titleEditing])
-
-  // Debounced description auto-save (800ms after typing stops)
-  useEffect(() => {
-    if (!selected || drawerTab !== 'edit') return
-    if (descDraft === (selected.description ?? '')) return
-    if (descTimeoutRef.current) window.clearTimeout(descTimeoutRef.current)
-    descTimeoutRef.current = window.setTimeout(() => {
-      void saveDescriptionDebounced()
-    }, 800)
-    return () => {
-      if (descTimeoutRef.current) window.clearTimeout(descTimeoutRef.current)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [descDraft])
 
   async function create() {
     try {
@@ -316,9 +307,10 @@ export function Tasks() {
     setTitleEditing(false)
   }
 
-  // Description debounced save
-  async function saveDescriptionDebounced() {
-    if (descDraft === (selected?.description ?? '')) return
+  // Description manual save (Save button only — no auto-save)
+  const descDirty = descDraft !== (selected?.description ?? '')
+  async function saveDescription() {
+    if (!descDirty) return
     setDescSaveStatus('saving')
     try {
       await patchTask({ description: descDraft }, { description: descDraft })
@@ -326,16 +318,6 @@ export function Tasks() {
       setTimeout(() => setDescSaveStatus('idle'), 2000)
     } catch {
       setDescSaveStatus('error')
-    }
-  }
-
-  async function saveDescriptionBlur() {
-    if (descTimeoutRef.current) {
-      window.clearTimeout(descTimeoutRef.current)
-      descTimeoutRef.current = null
-    }
-    if (descDraft !== (selected?.description ?? '')) {
-      await saveDescriptionDebounced()
     }
   }
 
@@ -425,6 +407,14 @@ export function Tasks() {
       const res = await api.post(`/tasks/${taskId}/generate`, {})
       const updated = res.task ?? res
       setSelected(updated)
+      // Replace drawer content with the AI result (same id, so drafts need manual sync)
+      setTitleDraft(updated.title ?? '')
+      setDescDraft(updated.description ?? '')
+      setTagsDraft(Array.isArray(updated.tags) ? updated.tags.join(', ') : (updated.tags ?? ''))
+      setDrawerTagInput('')
+      setDrawerTab('preview')
+      setDescSaveStatus('idle')
+      setSaveStatus('idle')
       setGenProgress({ stage: 6, status: 'done', detail: 'Saved' })
       setVersions(await api.get(`/tasks/${taskId}/versions`))
       setActivities(await api.get(`/tasks/${taskId}/activities`))
@@ -987,7 +977,7 @@ export function Tasks() {
             {/* Scrollable content */}
             <div className="flex-1 overflow-y-auto bg-background px-5 py-6 sm:px-6 space-y-6">
               {/* AI Hero — Generate with AI at top */}
-              <section aria-label="AI task generation" className="relative overflow-hidden rounded-2xl border border-violet-200/70 bg-gradient-to-br from-violet-600 via-indigo-600 to-fuchsia-600 p-5 text-white shadow-xl shadow-violet-600/20 dark:border-violet-800/60 dark:shadow-violet-950/40 sm:p-6">
+              <section aria-label="AI task generation" className={`relative overflow-hidden rounded-2xl border border-violet-200/70 bg-gradient-to-br from-violet-600 via-indigo-600 to-fuchsia-600 p-5 text-white shadow-xl shadow-violet-600/20 dark:border-violet-800/60 dark:shadow-violet-950/40 sm:p-6 motion-reduce:animate-none ${generating ? 'ai-border-animated' : ''}`}>
                 {/* decorative orbs + grid */}
                 <div aria-hidden="true" className="pointer-events-none absolute inset-0">
                   <div className="absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/15 blur-3xl" />
@@ -1329,8 +1319,18 @@ export function Tasks() {
               {/* Description — Edit / Preview with polished markdown */}
               <section className="card space-y-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <h3 className="inline-flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground">
-                    <FileText className="h-4 w-4 text-muted-foreground" /> Description
+                  <h3 className="inline-flex flex-wrap items-center gap-2 text-sm font-semibold tracking-tight text-foreground">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white shadow-sm">
+                        <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                      </span>
+                      Description
+                    </span>
+                    {selected.ai_generated && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-violet-600 via-indigo-600 to-fuchsia-600 px-2.5 py-0.5 text-[11px] font-bold text-white shadow-sm">
+                        <Bot className="h-3 w-3" aria-hidden="true" /> AI Generated • v{selected.version}
+                      </span>
+                    )}
                   </h3>
                   <div className="flex items-center gap-2">
                     <SaveIndicator status={descSaveStatus} />
@@ -1360,7 +1360,6 @@ export function Tasks() {
                     <textarea
                       value={descDraft}
                       onChange={(e) => setDescDraft(e.target.value)}
-                      onBlur={() => void saveDescriptionBlur()}
                       placeholder="Write task details in Markdown…
 
 # Example
@@ -1372,13 +1371,13 @@ export function Tasks() {
 ```js
 // code
 ```"
-                      className="input min-h-[280px] resize-y py-3 font-mono text-[13px] leading-relaxed"
+                      className="input min-h-[280px] resize-y py-3 font-mono text-[13px] leading-relaxed !border-slate-300 !shadow-sm dark:!border-slate-500"
                       aria-label="Task description (Markdown)"
                     />
-                    <p className="text-xs text-muted-foreground">Auto-saves 800ms after you stop typing, or on blur. Markdown is preserved.</p>
+                    <p className="text-xs text-muted-foreground">Click Save to apply your changes. Markdown is preserved.</p>
                   </div>
                 ) : (
-                  <div className="min-h-[180px] rounded-xl border border-border bg-card p-5 shadow-sm">
+                  <div className="min-h-[180px] rounded-xl border-2 border-slate-300 bg-card p-5 shadow dark:border-slate-500">
                     {descDraft ? (
                       <MarkdownPreview content={descDraft} />
                     ) : (
@@ -1390,6 +1389,15 @@ export function Tasks() {
                 <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
                   <span className="text-xs text-muted-foreground">Markdown • {drawerTab === 'edit' ? 'editing' : 'preview'}</span>
                   <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void saveDescription()}
+                      disabled={!descDirty || descSaveStatus === 'saving'}
+                      className="btn btn-primary btn-sm gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {descSaveStatus === 'saving' ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Save className="h-3.5 w-3.5" aria-hidden="true" />}
+                      {descSaveStatus === 'saving' ? 'Saving…' : 'Save'}
+                    </button>
                     <button type="button" onClick={copy} className="btn btn-outline btn-sm gap-1.5">
                       <Copy className="h-3.5 w-3.5" /> Copy
                     </button>
@@ -1400,12 +1408,23 @@ export function Tasks() {
                 </div>
               </section>
 
-              {/* Activity */}
+              {/* Activity — collapsible */}
               <section className="card space-y-4">
-                <h3 className="inline-flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground">
-                  <Activity className="h-4 w-4 text-muted-foreground" /> Activity
-                </h3>
-                {activities.length ? (
+                <button
+                  type="button"
+                  onClick={() => setActivityOpen((v) => !v)}
+                  aria-expanded={activityOpen}
+                  className="flex w-full cursor-pointer items-center gap-2 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <h3 className="inline-flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground">
+                    <Activity className="h-4 w-4 text-muted-foreground" /> Activity
+                  </h3>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground">
+                    {activities.length}
+                  </span>
+                  <ChevronDown className={`ml-auto h-4 w-4 text-muted-foreground transition-transform motion-reduce:transition-none ${activityOpen ? '' : '-rotate-90'}`} aria-hidden="true" />
+                </button>
+                {activityOpen && (activities.length ? (
                   <div className="relative space-y-0">
                     <div className="absolute left-2 top-2 h-[calc(100%-16px)] w-px bg-border" aria-hidden="true" />
                     <ul className="space-y-4">
@@ -1436,15 +1455,26 @@ export function Tasks() {
                   </div>
                 ) : (
                   <p className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-8 text-center text-sm font-medium text-muted-foreground">No activity</p>
-                )}
+                ))}
               </section>
 
-              {/* Versions */}
+              {/* Versions — collapsible */}
               <section className="card space-y-4">
-                <h3 className="inline-flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground">
-                  <History className="h-4 w-4 text-muted-foreground" /> Timeline — Versions
-                </h3>
-                {versions.length ? (
+                <button
+                  type="button"
+                  onClick={() => setVersionsOpen((v) => !v)}
+                  aria-expanded={versionsOpen}
+                  className="flex w-full cursor-pointer items-center gap-2 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <h3 className="inline-flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground">
+                    <History className="h-4 w-4 text-muted-foreground" /> Timeline — Versions
+                  </h3>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground">
+                    {versions.length}
+                  </span>
+                  <ChevronDown className={`ml-auto h-4 w-4 text-muted-foreground transition-transform motion-reduce:transition-none ${versionsOpen ? '' : '-rotate-90'}`} aria-hidden="true" />
+                </button>
+                {versionsOpen && (versions.length ? (
                   <div className="space-y-3">
                     {versions.map((v) => (
                       <div
@@ -1472,7 +1502,7 @@ export function Tasks() {
                   </div>
                 ) : (
                   <p className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-8 text-center text-sm font-medium text-muted-foreground">No versions</p>
-                )}
+                ))}
               </section>
 
               {/* Delete Task — smart business danger zone (end of screen) */}

@@ -80,6 +80,16 @@ export function renderMarkdown(md: string): string {
   // Clean up: remove <br/> inside <pre>, <table>, <ul> boundaries
   html = html.replace(/<pre>([\s\S]*?)<\/pre>/g, (m, c) => m.replace(/<br\/>/g, '\n'))
   html = html.replace(/<table>([\s\S]*?)<\/table>/g, (m, c) => m.replace(/<br\/>/g, ''))
+  // Stray breaks around block elements create phantom blank lines
+  // (e.g. the newline after "# title" became margin + an extra empty line)
+  html = html.replace(/(<\/(?:h1|h2|h3|h4|blockquote|ul|ol|table|pre)>|<hr\s*\/>)\s*<br\/>/g, '$1')
+  html = html.replace(/<br\/>\s*(<(?:h1|h2|h3|h4|blockquote|ul|ol|table|hr|pre)[\s>])/g, '$1')
+  // Breaks between list items are list spacing, not extra lines
+  html = html.replace(/(<\/li>)\s*<br\/>\s*(<li>)/g, '$1$2')
+  // Collapse 3+ consecutive breaks (extra blank lines) into a single blank line
+  html = html.replace(/(<br\/>\s*){3,}/g, '<br/><br/>')
+  // No leading/trailing blank lines
+  html = html.replace(/^(<br\/>\s*)+/, '').replace(/(<br\/>\s*)+$/, '')
 
   return html
 }

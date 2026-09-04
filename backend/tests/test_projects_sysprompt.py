@@ -88,6 +88,21 @@ async def test_generate_system_prompt_bad_path(client):
     assert r.status_code==404
 
 @pytest.mark.asyncio
+async def test_ai_config_test_endpoint(client):
+    data = await signup(client, email="sysp4@example.com")
+    h = {"Authorization": f"Bearer {data['access_token']}"}
+    # missing config -> 400, never 404 (route must exist)
+    r = await client.post("/api/settings/ai-config/test", json={}, headers=h)
+    assert r.status_code == 400, r.text
+    await client.put("/api/settings/ai-config", json={"provider_url": "mock://test", "model_name": "mock-model", "api_key": "sk-test-key"}, headers=h)
+    r = await client.post("/api/settings/ai-config/test", json={}, headers=h)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is True
+    assert isinstance(body["latency_ms"], int)
+    assert body["sample"]
+
+@pytest.mark.asyncio
 async def test_task_generation_uses_project_policy(client):
     from app.agents.prompt_manager import PromptManager
     pm = PromptManager("agent-base", project_policy="POLICY: reuse APIs.")

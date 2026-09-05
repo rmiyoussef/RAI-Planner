@@ -96,10 +96,6 @@ run_frontend_tests() {
   echo "  ✓ frontend tests passed"
 }
 
-backend_pid_alive() {
-  [ -f "logs/backend.pid" ] && kill -0 "$(cat logs/backend.pid 2>/dev/null)" 2>/dev/null
-}
-
 backend_health_ok() {
   curl -sf -m 5 "${BACKEND_BASE}${API_PREFIX}/health" >/dev/null 2>&1
 }
@@ -157,26 +153,67 @@ PYEOF
   echo "  ✓ all on-disk routes are served"
 }
 
+# True when TCP :BACKEND_PORT accepts connections (process-agnostic).
+backend_port_busy() {
+  python3 -c "import socket,sys; s=socket.socket(); s.settimeout(2); sys.exit(0 if s.connect_ex(('127.0.0.1', $BACKEND_PORT))==0 else 1)" 2>/dev/null
+}
+
+# True when pid exists AND is our uvicorn (never kill a recycled foreign pid).
+pid_is_ours() {
+  [ -n "$1" ] && kill -0 "$1" 2>/dev/null && tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null | grep -q "uvicorn.*app\.main:app"
+}
+
+# PIDs of processes matching our exact launch line on our port
+# (catches reparented --reload children that outlive the supervisor).
+our_uvicorn_pids() {
+  ps -eo pid,args 2>/dev/null | grep -F "app.main:app" | grep -F -- "--port $BACKEND_PORT" | grep -v grep | awk '{print $1}'
+}
+
 restart_backend() {
   echo "→ Restarting backend so new code loads..."
-  if backend_pid_alive; then
+  if [ -f logs/backend.pid ]; then
     local pid
-    pid=$(cat logs/backend.pid)
-    echo "  Stopping old backend (pid $pid)..."
-    kill "$pid" 2>/dev/null || true
-    for _ in $(seq 1 20); do
-      kill -0 "$pid" 2>/dev/null || break
-      sleep 0.5
-    done
-    kill -0 "$pid" 2>/dev/null && { echo "✗ Old backend (pid $pid) refused to stop. Kill it manually."; exit 1; }
+    pid=$(cat logs/backend.pid 2>/dev/null)
+    if pid_is_ours "$pid"; then
+      echo "  Stopping old backend (pid $pid)..."
+      kill "$pid" 2>/dev/null || true
+    else
+      echo "  Stale pid file (pid ${pid:-?} is not our backend) — removing."
+    fi
     rm -f logs/backend.pid
-  elif backend_health_ok; then
-    echo "✗ Backend on :${BACKEND_PORT} is running OUTSIDE update.sh control (no logs/backend.pid)."
+  fi
+  # Sweep survivors: --reload children can outlive the supervisor and keep
+  # the port bound, which fails the fresh start with "Address already in use".
+  local p
+  for p in $(our_uvicorn_pids); do
+    echo "  Stopping leftover backend worker (pid $p)..."
+    kill "$p" 2>/dev/null || true
+  done
+  for _ in $(seq 1 10); do
+    [ -z "$(our_uvicorn_pids)" ] && break
+    sleep 0.5
+  done
+  for p in $(our_uvicorn_pids); do
+    echo "  Worker $p ignores SIGTERM — SIGKILL..."
+    kill -9 "$p" 2>/dev/null || true
+  done
+  # Wait until the PORT itself is free (pid death ≠ socket release).
+  for _ in $(seq 1 30); do
+    backend_port_busy || break
+    sleep 0.5
+  done
+  if backend_port_busy; then
+    echo "✗ Port :${BACKEND_PORT} still held after stopping our backend. Holder:"
+    (ss -ltnp 2>/dev/null | grep ":${BACKEND_PORT}" || echo "  (unknown — inspect manually)") | sed 's/^/  /'
+    echo "  Free the port (or stop the external backend), then re-run ./update.sh --verify-only."
+    exit 1
+  fi
+  if backend_health_ok; then
+    echo "✗ Something else answers health on :${BACKEND_PORT} with no matching process."
     echo "  Restart it manually (docker / systemd / screen), then re-run ./update.sh --verify-only."
     exit 1
-  else
-    echo "  Backend not running — starting fresh."
   fi
+  echo "  Port :${BACKEND_PORT} free — starting fresh backend."
   if [ ! -x "backend/.venv/bin/uvicorn" ]; then
     echo "✗ backend/.venv missing uvicorn — run ./install.sh first."; exit 1
   fi

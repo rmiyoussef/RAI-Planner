@@ -89,8 +89,8 @@ async def put_ai_config(payload: AIConfigRequest, request: Request, owner=Depend
 async def test_ai_config(request: Request, owner=Depends(get_current_owner)):
     """Send a tiny probe completion through the configured provider.
 
-    Tries chat → responses → messages protocols automatically and reports
-    which chain worked, so owners can verify Settings → AI Configuration.
+    Tries the last working protocol first, then the rest automatically, and
+    reports which one worked, so owners can verify AI Configuration.
     """
     import time
     from app.agents.ai_provider import AIProvider
@@ -114,7 +114,12 @@ async def test_ai_config(request: Request, owner=Depends(get_current_owner)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     latency_ms = int((time.monotonic() - start) * 1000)
-    return {"ok": True, "latency_ms": latency_ms, "sample": (out or "")[:200]}
+    return {
+        "ok": True,
+        "latency_ms": latency_ms,
+        "sample": (out or "")[:200],
+        "protocol": getattr(provider, "last_protocol", None) or "chat",
+    }
 
 # Agent settings
 @router.get("/agent", response_model=AgentStatusResponse)

@@ -249,10 +249,12 @@ class SmartEngineeringAgent:
             self.state = "idle"
             self.last_success = completed.isoformat()
             self.last_activity = utc_now()
-            self._set_progress(owner_id, task_id, 6, "done", "Saved")
+            protocol = getattr(self.ai_provider, "last_protocol", None) or "chat"
+            logger.info("Task %s generated via %s protocol in %dms", task_id, protocol, duration)
+            self._set_progress(owner_id, task_id, 6, "done", f"Saved via {protocol}")
             # fetch updated task
             updated = await tasks_col.find_one({"_id": task_id})
-            return {"markdown": markdown, "task": updated, "run_id": run_id}
+            return {"markdown": markdown, "task": updated, "run_id": run_id, "elapsed_ms": duration, "protocol": protocol}
         except Exception as e:
             err_msg = str(e)
             # categorize

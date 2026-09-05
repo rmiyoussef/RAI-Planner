@@ -37,6 +37,14 @@ export function Layout() {
   const { owner, logout } = useAuth()
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [confirmLogout, setConfirmLogout] = useState(false)
+
+  function doLogout() {
+    setConfirmLogout(false)
+    setMobileOpen(false)
+    logout()
+    navigate('/login')
+  }
   const [company, setCompany] = useState<{ company_name: string; company_logo: string | null } | null>(null)
 
   useEffect(() => {
@@ -174,7 +182,7 @@ export function Layout() {
           </div>
 
           <button
-            onClick={() => { logout(); navigate('/login') }}
+            onClick={() => setConfirmLogout(true)}
             className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/10 px-4 py-2.5 text-sm font-medium text-white hover:bg-white/15 transition-colors cursor-pointer"
           >
             <LogOut className="w-4 h-4" />
@@ -224,6 +232,28 @@ export function Layout() {
           © 2026 Squadify Lab · {import.meta.env.VITE_APP_NAME} · Rami Youssef · v{(pkg as any).version}
         </footer>
       </div>
+
+      {/* Logout confirmation */}
+      {confirmLogout && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="logout-title">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setConfirmLogout(false)} aria-hidden="true" />
+          <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-border bg-card shadow-2xl animate-in">
+            <div className="px-6 py-5 space-y-1.5">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                <LogOut className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <h3 id="logout-title" className="text-base font-bold tracking-tight">Sign out?</h3>
+              <p className="text-sm leading-relaxed text-muted-foreground">You will be signed out of your owner account on this device.</p>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-border bg-muted/30 px-6 py-4">
+              <button type="button" onClick={() => setConfirmLogout(false)} className="btn btn-ghost h-10 px-5">Stay signed in</button>
+              <button type="button" onClick={doLogout} className="btn btn-primary h-10 px-5 gap-2">
+                <LogOut className="h-4 w-4" /> Sign out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -57,7 +57,7 @@ export function Settings() {
   const [saving, setSaving] = useState(false)
   const [loadingAgent, setLoadingAgent] = useState(false)
   const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState<{ ok: boolean; latency_ms?: number; sample?: string; error?: string } | null>(null)
+  const [testResult, setTestResult] = useState<{ ok: boolean; latency_ms?: number; sample?: string; protocol?: string; error?: string } | null>(null)
 
   async function loadAI() {
     try {
@@ -218,7 +218,7 @@ export function Settings() {
     setError('')
     try {
       const res = await api.post('/settings/ai-config/test', {})
-      setTestResult({ ok: true, latency_ms: res.latency_ms, sample: res.sample })
+      setTestResult({ ok: true, latency_ms: res.latency_ms, sample: res.sample, protocol: res.protocol })
     } catch (e: any) {
       setTestResult({ ok: false, error: e.message || 'Connection test failed.' })
     } finally {
@@ -686,6 +686,7 @@ export function Settings() {
                       {testResult.ok ? (
                         <p className="font-medium break-words">
                           Connected in {testResult.latency_ms}ms
+                          {testResult.protocol ? <span className="font-mono text-[11px]"> via {testResult.protocol}</span> : null}
                           {testResult.sample ? <span className="font-normal"> — reply: “{testResult.sample}”</span> : null}
                         </p>
                       ) : (

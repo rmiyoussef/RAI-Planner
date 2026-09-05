@@ -167,6 +167,7 @@ export function Tasks() {
       setTitleEditing(false)
       setDrawerTagInput('')
       setGenerateError('')
+      setGenResult(null)
       setActivityOpen(false)
       setVersionsOpen(false)
       setSaveStatus('idle')
@@ -374,7 +375,15 @@ export function Tasks() {
   }
 
   const [genProgress, setGenProgress] = useState<{ stage: number; status: string; detail: string } | null>(null)
+  const [genResult, setGenResult] = useState<{ elapsedMs: number | null; protocol: string | null } | null>(null)
   const genPollRef = useRef<number | null>(null)
+
+  function formatGenDuration(ms: number | null): string | null {
+    if (ms === null || ms === undefined || Number.isNaN(ms)) return null
+    const s = Math.max(0, Math.round(ms / 1000))
+    if (s < 60) return `${s}s`
+    return `${Math.floor(s / 60)}m ${s % 60}s`
+  }
 
   function stopGenPoll() {
     if (genPollRef.current) {
@@ -389,6 +398,7 @@ export function Tasks() {
     setGenerating(true)
     setError('')
     setGenerateError('')
+    setGenResult(null)
     setGenProgress({ stage: 0, status: 'running', detail: 'Starting…' })
     // Poll live per-stage progress (display only — the POST below is source of truth)
     const poll = async () => {
@@ -415,6 +425,9 @@ export function Tasks() {
       setDrawerTab('preview')
       setDescSaveStatus('idle')
       setSaveStatus('idle')
+      if (typeof res.elapsed_ms === 'number' || res.protocol) {
+        setGenResult({ elapsedMs: res.elapsed_ms ?? null, protocol: res.protocol ?? null })
+      }
       setGenProgress({ stage: 6, status: 'done', detail: 'Saved' })
       setVersions(await api.get(`/tasks/${taskId}/versions`))
       setActivities(await api.get(`/tasks/${taskId}/activities`))
@@ -1120,6 +1133,14 @@ export function Tasks() {
                   {selected.ai_generated && !generating && (
                     <p className="mt-3 flex items-center gap-1.5 rounded-xl bg-white/10 px-3 py-2 text-xs font-medium text-white/90 ring-1 ring-white/20">
                       <Bot className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> AI has already polished this task. Check Timeline below for the AI version.
+                      {(() => {
+                        const dur = formatGenDuration(genResult?.elapsedMs ?? null)
+                        const bits = [
+                          genResult?.protocol ? `via ${genResult.protocol}` : null,
+                          dur ? `in ${dur}` : null,
+                        ].filter(Boolean)
+                        return bits.length ? <span className="ml-auto shrink-0 font-mono text-[11px] text-white/70">({bits.join(' · ')})</span> : null
+                      })()}
                     </p>
                   )}
                 </div>

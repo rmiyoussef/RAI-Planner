@@ -668,7 +668,7 @@ export function ProjectDetail() {
       )}
 
       {activeTab === 'brain' && (
-      <div className="card border-2 flex flex-col overflow-hidden">
+      <div className="card border-2 flex h-full min-h-0 flex-col overflow-hidden">
         <h3 className="font-semibold flex items-center gap-2 mb-4 shrink-0">
           <Brain className="w-5 h-5 text-primary" /> AI Project Brain
           {brain?.exists && <span className="badge badge-success ml-auto"><CheckCircle2 className="w-3 h-3 mr-1" /> Available</span>}
@@ -884,9 +884,9 @@ export function ProjectDetail() {
 
       {/* Brain file modal — formatted markdown — no top white gap */}
       {(brainFile || brainFileLoading || brainFileError) && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-6 sm:pt-8 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="brain-modal-title">
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-3 pt-3 sm:pt-4 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="brain-modal-title">
           <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => { setBrainFile(null); setBrainFileError('') }} aria-hidden="true" />
-          <div className="relative flex max-h-[85vh] w-[95vw] max-w-7xl flex-col rounded-2xl bg-card shadow-xl overflow-hidden animate-in my-4 border border-border">
+          <div className="relative flex max-h-[94vh] w-[95vw] max-w-7xl flex-col rounded-2xl bg-card shadow-xl overflow-hidden animate-in my-2 border border-border">
             <div className="flex items-center justify-between gap-3 border-b border-border bg-card px-4 py-3 shrink-0">
               <div className="min-w-0 flex items-center gap-2">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-white">

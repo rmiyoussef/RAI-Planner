@@ -29,8 +29,11 @@ import {
   FolderOpen,
   ChevronRight,
   ChevronDown,
+  LayoutTemplate,
 } from 'lucide-react'
 import { MarkdownPreview } from '../components/Markdown'
+import { ProjectRulesTab } from '../components/projects/ProjectRulesTab'
+import { TaskTemplatesTab } from '../components/projects/TaskTemplatesTab'
 import { statusLabel, priorityLabel, statusTone, priorityTone } from '../utils/taskLabels'
 
 function OverviewPanel({
@@ -242,8 +245,8 @@ export function ProjectDetail() {
   const [brainFileLoading, setBrainFileLoading] = useState(false)
   const [brainFileError, setBrainFileError] = useState('')
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set(['/']))
-  // tabs: overview | system prompt | AI brain
-  const [activeTab, setActiveTab] = useState<'overview' | 'system' | 'brain'>('overview')
+  // tabs: overview | system prompt | rules | templates | AI brain
+  const [activeTab, setActiveTab] = useState<'overview' | 'system' | 'rules' | 'templates' | 'brain'>('overview')
   // project system prompt (engineering policy for the AI agent)
   const [sysPrompt, setSysPrompt] = useState('')
   const [sysDraft, setSysDraft] = useState('')
@@ -524,6 +527,8 @@ export function ProjectDetail() {
         {([
           { id: 'overview', label: 'Overview', icon: FolderKanban, dot: false },
           { id: 'system', label: 'System Prompt', icon: Bot, dot: sysDirty },
+          { id: 'rules', label: 'Rules', icon: ListChecks, dot: false },
+          { id: 'templates', label: 'Templates', icon: LayoutTemplate, dot: false },
           { id: 'brain', label: 'AI Project Brain', icon: Brain, dot: !!brain?.exists },
         ] as const).map((t) => {
           const active = activeTab === t.id
@@ -652,6 +657,14 @@ export function ProjectDetail() {
           </button>
         </div>
       </div>
+      )}
+
+      {activeTab === 'rules' && (
+        <ProjectRulesTab projectId={project.id} />
+      )}
+
+      {activeTab === 'templates' && (
+        <TaskTemplatesTab projectId={project.id} />
       )}
 
       {activeTab === 'brain' && (

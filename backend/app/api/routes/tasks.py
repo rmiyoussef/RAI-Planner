@@ -20,6 +20,11 @@ async def enrich_task(doc, owner_id: str):
         u = await get_collection("users").find_one({"_id": doc["assigned_to"]})
         if u:
             assigned_name = u.get("full_name")
+    template_name = None
+    if doc.get("template_id"):
+        t = await get_collection("task_templates").find_one({"_id": doc["template_id"]})
+        if t:
+            template_name = t.get("name")
     return TaskResponse(
         id=doc["_id"],
         owner_id=doc["owner_id"],
@@ -33,6 +38,8 @@ async def enrich_task(doc, owner_id: str):
         assigned_user_name=assigned_name,
         tags=doc.get("tags",[]),
         task_type=doc.get("task_type", "task"),
+        template_id=doc.get("template_id"),
+        template_name=template_name,
         ai_generated=doc.get("ai_generated", False),
         version=doc.get("version",1),
         created_at=doc["created_at"],
@@ -87,6 +94,14 @@ async def create_task(payload: TaskCreate, request: Request, owner=Depends(get_c
         u = await get_collection("users").find_one({"_id": payload.assigned_to, "owner_id": owner["_id"]})
         if not u:
             raise HTTPException(status_code=400, detail="Assigned user not found")
+    # validate template belongs to the project if provided (optional)
+    template_id = payload.template_id or None
+    if template_id:
+        t = await get_collection("task_templates").find_one(
+            {"_id": template_id, "owner_id": owner["_id"], "project_id": payload.project_id}
+        )
+        if not t:
+            raise HTTPException(status_code=400, detail="Template not found for this project")
     doc = {
         "_id": new_id(),
         "owner_id": owner["_id"],
@@ -98,6 +113,7 @@ async def create_task(payload: TaskCreate, request: Request, owner=Depends(get_c
         "assigned_to": payload.assigned_to,
         "tags": payload.tags,
         "task_type": payload.task_type,
+        "template_id": template_id,
         "ai_generated": False,
         "version": 1,
         "created_at": utc_now(),
@@ -144,16 +160,23 @@ async def _perform_task_update(task_id: str, payload: TaskUpdate, owner) -> Task
     if not doc:
         raise HTTPException(status_code=404, detail="Task not found")
     # Determine which fields were explicitly provided (supports clearing assigned_to with null)
-    provided = payload.model_fields_set if hasattr(payload, "model_fields_set") else {k for k in ["title","description","priority","status","assigned_to","tags","task_type"] if getattr(payload, k) is not None}
+    provided = payload.model_fields_set if hasattr(payload, "model_fields_set") else {k for k in ["title","description","priority","status","assigned_to","tags","task_type","template_id"] if getattr(payload, k) is not None}
     # validate assigned_to when explicitly provided and non-null
     if "assigned_to" in provided and payload.assigned_to is not None and payload.assigned_to != "":
         u = await get_collection("users").find_one({"_id": payload.assigned_to, "owner_id": owner["_id"]})
         if not u:
             raise HTTPException(status_code=400, detail="Assigned user not found")
+    # validate template belongs to the task's project when explicitly provided
+    if "template_id" in provided and payload.template_id:
+        t = await get_collection("task_templates").find_one(
+            {"_id": payload.template_id, "owner_id": owner["_id"], "project_id": doc["project_id"]}
+        )
+        if not t:
+            raise HTTPException(status_code=400, detail="Template not found for this project")
     # capture changes — only for fields that were provided
     changes = []
     updates: dict = {}
-    for field in ["title","description","priority","status","assigned_to","tags","task_type"]:
+    for field in ["title","description","priority","status","assigned_to","tags","task_type","template_id"]:
         if field not in provided:
             continue
         new_val = getattr(payload, field)

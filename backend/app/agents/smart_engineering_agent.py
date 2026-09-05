@@ -168,10 +168,45 @@ class SmartEngineeringAgent:
                 system_prompt = settings.get("system_prompt")
             # 9 skills
             skills_text = await self.skill_manager.enabled_skills_text(owner_id)
-            # 10 build prompts (project engineering policy takes priority)
+            # 10 build prompts (policy + rules + template take priority)
+            from app.agents.project_policy import (
+                ensure_project_defaults, load_enabled_rules, load_template, render_template,
+            )
+            from app.services.filesystem import analyze_project
+            await ensure_project_defaults(owner_id, project["_id"])
+            rules = await load_enabled_rules(owner_id, project["_id"])
+            tpl_doc = await load_template(owner_id, project["_id"], task.get("template_id"))
+            assigned_name = None
+            if task.get("assigned_to"):
+                _u = await get_collection("users").find_one({"_id": task["assigned_to"]})
+                if _u:
+                    assigned_name = _u.get("full_name")
+            template_text = ""
+            if tpl_doc and (tpl_doc.get("content") or "").strip():
+                template_text = render_template(tpl_doc["content"], {
+                    "title": task.get("title", ""),
+                    "project_name": project.get("name", ""),
+                    "task_type": task.get("task_type", "task"),
+                    "description": task.get("description", ""),
+                    "priority": task.get("priority", ""),
+                    "status": task.get("status", ""),
+                    "assigned_to": assigned_name or "",
+                })
+            try:
+                testing_hint = (analyze_project(project_path).get("testing") or "")
+            except Exception:
+                testing_hint = ""
+            logger.info(
+                "Task %s: policy=%d chars, rules=%d, template=%s, testing=%s",
+                task_id, len(project_policy), len(rules),
+                tpl_doc.get("name") if tpl_doc else None, testing_hint or "unknown",
+            )
             self._set_progress(owner_id, task_id, 2, "running", "Building context & prompt")
-            pm = PromptManager(system_prompt, project_policy=project_policy)
-            user_prompt = pm.build_user_prompt(task, project, context, skills_text)
+            pm = PromptManager(
+                system_prompt, project_policy=project_policy,
+                project_rules=rules, template=template_text,
+            )
+            user_prompt = pm.build_user_prompt(task, project, context, skills_text, testing_hint=testing_hint)
             system_prompt = pm.get_system_prompt()
             # 11-13 generate
             # ensure agent is considered running

@@ -14,6 +14,7 @@ class TaskCreate(BaseModel):
     assigned_to: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
     task_type: TaskType = "task"
+    template_id: Optional[str] = None
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = Field(default=None, min_length=1, max_length=300)
@@ -23,6 +24,7 @@ class TaskUpdate(BaseModel):
     assigned_to: Optional[str] = None
     tags: Optional[List[str]] = None
     task_type: Optional[TaskType] = None
+    template_id: Optional[str] = None
 
 class TaskResponse(BaseModel):
     id: str
@@ -37,6 +39,8 @@ class TaskResponse(BaseModel):
     assigned_user_name: Optional[str] = None
     tags: List[str]
     task_type: str = "task"
+    template_id: Optional[str] = None
+    template_name: Optional[str] = None
     ai_generated: bool = False
     version: int = 1
     created_at: str

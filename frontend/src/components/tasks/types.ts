@@ -21,6 +21,8 @@ export type TaskItem = {
   version?: number
   ai_generated?: boolean
   description?: string
+  template_id?: string | null
+  template_name?: string | null
 }
 
 export type SortConfig = {

@@ -51,23 +51,61 @@ Rules:
 
 
 class PromptManager:
-    def __init__(self, custom_prompt: str = "", project_policy: str = ""):
+    def __init__(self, custom_prompt: str = "", project_policy: str = "",
+                 project_rules: list = None, template: str = ""):
         self.custom_prompt = custom_prompt or DEFAULT_SYSTEM_PROMPT
         self.project_policy = (project_policy or "").strip()
+        self.project_rules = [r for r in (project_rules or []) if (r or "").strip()]
+        self.template = (template or "").strip()
 
     def get_system_prompt(self) -> str:
         base = self.custom_prompt or DEFAULT_SYSTEM_PROMPT
+        parts = []
         if self.project_policy:
-            return (
+            parts.append(
                 "PROJECT ENGINEERING POLICY (highest priority — project-specific rules):\n"
-                f"{self.project_policy}\n\n---\n\n{base}"
+                f"{self.project_policy}"
             )
-        return base
+        if self.project_rules:
+            numbered = "\n".join(f"{i + 1}. {r.strip()}" for i, r in enumerate(self.project_rules))
+            parts.append(
+                "PROJECT RULES (mandatory constraints — satisfy every applicable rule. "
+                "If a rule conflicts with the request or is technically impossible, "
+                "flag the conflict explicitly instead of silently ignoring either side):\n"
+                f"{numbered}"
+            )
+        parts.append(base)
+        return "\n\n---\n\n".join(parts)
 
-    def build_user_prompt(self, task: dict, project: dict, context: dict, skills_content: str = "") -> str:
+    def build_user_prompt(self, task: dict, project: dict, context: dict, skills_content: str = "",
+                          testing_hint: str = "") -> str:
         brain = context.get("brain_content", "")[:8000]
         structure = "\n".join(context.get("structure_sample", [])[:80])
         top = ", ".join(context.get("top_level", [])[:30])
+        task_type = (task.get("task_type") or "task").lower()
+        template_section = (
+            f"Selected Task Template (structural starting point — adapt sections to the task, "
+            f"never copy blindly, and never let it override policy or rules):\n{self.template}\n"
+            if self.template else ""
+        )
+        testing_section = (
+            f"Project testing: {testing_hint}\n" if testing_hint else ""
+        )
+        test_requirement = ""
+        if task_type == "feature":
+            test_requirement = (
+                "Test Cases section is MANDATORY for this Feature task: generate complete "
+                "project-aware test cases (happy path, validation, authorization where applicable, "
+                "edge cases, failure scenarios, regression scenarios). Only include relevant "
+                "categories — no filler cases."
+            )
+        elif task_type == "bug":
+            test_requirement = (
+                "Test Cases section is MANDATORY for this Bug task: include a Regression Test that "
+                "reproduces the original failure and verifies the fix, plus relevant edge cases, "
+                "failure scenarios, validation/authorization checks, and existing-behavior checks. "
+                "Never reduce this to a bare 'Add tests'."
+            )
         return f"""Project: {project.get('name')} - {project.get('description','')}
 Project Path: {project.get('project_path')}
 Top-level: {top}
@@ -80,12 +118,15 @@ Structure sample:
 Enabled Skills:
 {skills_content if skills_content else '(none)'}
 
-Existing Task:
+{testing_section}Existing Task:
 Title: {task.get('title')}
+Type: {task_type}
 Description:
 {task.get('description')}
 
 Priority: {task.get('priority')} Status: {task.get('status')} Tags: {task.get('tags')}
 
-Rewrite this task into a high-quality engineering task in Markdown. Follow the structure: Objective, Context, Problem, Technical Understanding, Architecture/Components, Expected Behavior, Implementation Considerations, Acceptance Criteria, Edge Cases, Testing, Dependencies, Affected Files. If project context is insufficient, note uncertainty. Above all, obey the PROJECT ENGINEERING POLICY from the system message — its rules override everything else.
+{template_section}Rewrite this task into a high-quality engineering task in Markdown. Follow the structure: Objective, Context, Problem, Technical Understanding, Architecture/Components, Expected Behavior, Implementation Considerations, Acceptance Criteria, Edge Cases, Testing, Dependencies, Affected Files. If project context is insufficient, note uncertainty. Above all, obey the PROJECT ENGINEERING POLICY and PROJECT RULES from the system message — they override everything else, including the template structure: add any section (e.g. Test Cases) the rules demand even if the template lacks it.
+{test_requirement}
+Before returning, run this quality gate and revise until satisfied: objective clear; existing implementation inspected; API reuse-vs-create decided with justification; policy, rules and template followed; Feature/Bug has project-aware Test Cases (Bug: reproducing regression test); test framework matches the project; Definition of Done present; no duplicate APIs; no unrelated changes; no raw {{{{variables}}}} left in the output.
 """

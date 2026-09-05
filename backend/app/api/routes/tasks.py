@@ -281,7 +281,12 @@ async def generate_task(task_id: str, owner=Depends(get_current_owner)):
     # check disabled state handled inside agent
     try:
         result = await agent.generate_task(owner["_id"], task_id)
-        return {"markdown": result["markdown"], "task": await enrich_task(result["task"], owner["_id"])}
+        return {
+            "markdown": result["markdown"],
+            "task": await enrich_task(result["task"], owner["_id"]),
+            "elapsed_ms": result.get("elapsed_ms"),
+            "protocol": result.get("protocol"),
+        }
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
     except RuntimeError as re:

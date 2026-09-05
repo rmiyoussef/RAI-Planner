@@ -6,7 +6,22 @@ from app.core.database import get_collection
 
 logger = logging.getLogger(__name__)
 
+
+class _TryNextProtocol(Exception):
+    """Internal: the endpoint speaks another protocol — try the next one."""
+
+
+PROTOCOLS = ("chat", "responses", "messages")
+PROTOCOL_LABELS = {
+    "chat": "chat protocol",
+    "responses": "Responses protocol",
+    "messages": "Messages protocol",
+}
+
+
 class AIProvider:
+    # Last protocol that succeeded ("chat"/"responses"/"messages"/"mock"/None).
+    last_protocol: Optional[str] = None
     async def get_config(self, owner_id: str) -> Optional[Dict[str, Any]]:
         col = get_collection("ai_configs")
         return await col.find_one({"owner_id": owner_id})
@@ -52,48 +67,42 @@ class AIProvider:
 
         # If no real key (test/demo), fallback to mock generation
         if api_key.startswith("sk-test") or api_key == "test" or "mock" in provider_url.lower():
+            self.last_protocol = "mock"
             return self._mock_generation(system_prompt, user_prompt, model)
 
+        # Try the last working protocol first so repeat runs skip dead ends
+        # instead of re-burning round trips (or timeouts) on every generation.
+        self.last_protocol = None
+        pref = (cfg.get("chat_protocol") or "chat")
+        if pref not in PROTOCOLS:
+            pref = "chat"
+        order = [pref] + [p for p in PROTOCOLS if p != pref]
+
+        last_mismatch: Optional[Exception] = None
         try:
             async with httpx.AsyncClient(timeout=self.TIMEOUT) as client:
                 headers = {
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json"
                 }
-                if on_progress:
-                    on_progress("Sending request (chat protocol)…")
-                logger.info("AI request attempt chat model=%s url=%s", model, url)
-                _t0 = time.monotonic()
-                resp = await client.post(url, headers=headers, json={
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    "temperature": 0.4,
-                    "max_tokens": max_tokens
-                })
-                logger.info(
-                    "AI chat attempt done model=%s status=%s elapsed_ms=%d",
-                    model, resp.status_code, int((time.monotonic() - _t0) * 1000),
-                )
-                if resp.status_code == 200:
-                    data = self._unwrap(resp.json())
-                    return data["choices"][0]["message"]["content"]
-                if resp.status_code == 404:
-                    # Some gateways (e.g. OpenModel) removed /v1/chat/completions
-                    # and only serve the Responses protocol — retry once there.
-                    if on_progress:
-                        on_progress("Chat endpoint missing — trying Responses protocol…")
-                    return await self._generate_via_responses(
-                        client, headers, base, model, system_prompt, user_prompt, max_tokens, on_progress
-                    )
-                # surface an actionable error (URL is not secret)
-                detail = resp.text[:300]
-                raise RuntimeError(
-                    f"AI provider returned {resp.status_code} for {url} — "
-                    "check the Provider URL in Settings → AI Configuration. "
-                    f"Provider said: {detail}"
+                for proto in order:
+                    if on_progress and proto != order[0]:
+                        on_progress(f"Trying {PROTOCOL_LABELS[proto]}…")
+                    try:
+                        text = await self._try_protocol(
+                            client, headers, url, base, proto,
+                            model, system_prompt, user_prompt, max_tokens, on_progress,
+                        )
+                    except _TryNextProtocol as e:
+                        last_mismatch = e
+                        continue
+                    self.last_protocol = proto
+                    await self._remember_protocol(owner_id, proto)
+                    return text
+                # Every protocol reported "wrong endpoint".
+                raise last_mismatch or RuntimeError(
+                    f"AI provider has no usable endpoint at {base} — "
+                    "check the Provider URL in Settings → AI Configuration."
                 )
         except httpx.ConnectTimeout:
             raise RuntimeError(
@@ -121,16 +130,80 @@ class AIProvider:
                 return self._mock_generation(system_prompt, user_prompt, model)
             raise RuntimeError(f"AI provider failed: {e}")
 
-    async def _generate_via_responses(
+    async def _try_protocol(
+        self, client: "httpx.AsyncClient", headers: dict,
+        chat_url: str, base: str, proto: str,
+        model: str, system_prompt: str, user_prompt: str,
+        max_tokens: int = 4000, on_progress=None,
+    ) -> str:
+        if proto == "chat":
+            return await self._try_chat(
+                client, headers, chat_url, model, system_prompt, user_prompt, max_tokens, on_progress
+            )
+        if proto == "responses":
+            return await self._try_responses(
+                client, headers, base, model, system_prompt, user_prompt, max_tokens, on_progress
+            )
+        return await self._try_messages(
+            client, headers, base, model, system_prompt, user_prompt, max_tokens, on_progress
+        )
+
+    async def _remember_protocol(self, owner_id: str, proto: str) -> None:
+        """Persist the working protocol so the next run tries it first.
+
+        Best-effort: a bookkeeping failure must never fail a generation.
+        """
+        try:
+            await get_collection("ai_configs").update_one(
+                {"owner_id": owner_id}, {"$set": {"chat_protocol": proto}}
+            )
+        except Exception as e:
+            logger.debug("Could not persist chat protocol: %s", e)
+
+    async def _try_chat(
+        self, client: "httpx.AsyncClient", headers: dict,
+        url: str, model: str, system_prompt: str, user_prompt: str,
+        max_tokens: int = 4000, on_progress=None,
+    ) -> str:
+        if on_progress:
+            on_progress("Sending request (chat protocol)…")
+        logger.info("AI request attempt chat model=%s url=%s", model, url)
+        _t0 = time.monotonic()
+        resp = await client.post(url, headers=headers, json={
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "temperature": 0.4,
+            "max_tokens": max_tokens
+        })
+        logger.info(
+            "AI chat attempt done model=%s status=%s elapsed_ms=%d",
+            model, resp.status_code, int((time.monotonic() - _t0) * 1000),
+        )
+        if resp.status_code == 200:
+            data = self._unwrap(resp.json())
+            return data["choices"][0]["message"]["content"]
+        if resp.status_code == 404:
+            # Some gateways (e.g. OpenModel) removed /v1/chat/completions.
+            raise _TryNextProtocol(f"chat endpoint 404 at {url}")
+        detail = resp.text[:300]
+        raise RuntimeError(
+            f"AI provider returned {resp.status_code} for {url} — "
+            "check the Provider URL in Settings → AI Configuration. "
+            f"Provider said: {detail}"
+        )
+
+    async def _try_responses(
         self, client: "httpx.AsyncClient", headers: dict,
         base: str, model: str, system_prompt: str, user_prompt: str,
         max_tokens: int = 4000, on_progress=None,
     ) -> str:
-        """OpenAI Responses-protocol fallback (POST /v1/responses).
+        """OpenAI Responses protocol (POST /v1/responses).
 
-        Used when the gateway 404s on /v1/chat/completions (e.g. OpenModel,
-        which removed the Chat Completions API). Temperature is omitted on
-        purpose — several served models only accept the default.
+        Temperature is omitted on purpose — several served models only
+        accept the default.
         """
         from urllib.parse import urlparse
         parts = urlparse(base if "://" in base else f"https://{base}")
@@ -154,12 +227,8 @@ class AIProvider:
             and any(s in (resp.text or "").lower() for s in ("responses", "protocol", "channel"))
         ):
             # Model may only be served via the Messages protocol
-            # (e.g. GLM/Zhipu models on OpenModel) — retry once there.
-            if on_progress:
-                on_progress("Trying Messages protocol…")
-            return await self._generate_via_messages(
-                client, headers, base, model, system_prompt, user_prompt, max_tokens, on_progress
-            )
+            # (e.g. GLM/Zhipu models on OpenModel).
+            raise _TryNextProtocol(f"responses endpoint unusable at {url}")
         if resp.status_code != 200:
             detail = resp.text[:300]
             raise RuntimeError(
@@ -182,12 +251,12 @@ class AIProvider:
             )
         return text
 
-    async def _generate_via_messages(
+    async def _try_messages(
         self, client: "httpx.AsyncClient", headers: dict,
         base: str, model: str, system_prompt: str, user_prompt: str,
         max_tokens: int = 4000, on_progress=None,
     ) -> str:
-        """Anthropic Messages-protocol fallback (POST /v1/messages).
+        """Anthropic Messages protocol (POST /v1/messages).
 
         Used when the model is only served via the Messages protocol
         (e.g. GLM, DeepSeek, Kimi models on multi-protocol gateways).

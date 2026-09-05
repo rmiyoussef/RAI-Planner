@@ -103,6 +103,39 @@ async def test_ai_config_test_endpoint(client):
     assert body["sample"]
 
 @pytest.mark.asyncio
+async def test_task_generation_sends_project_policy_first(client, monkeypatch):
+    """The model must receive the project's system prompt BEFORE anything else.
+
+    Intercepts the provider call and asserts the custom policy text is present
+    in the system message and positioned ahead of the generic agent prompt.
+    """
+    from app.agents.smart_engineering_agent import agent as singleton_agent
+    data = await signup(client, email="sysp5@example.com")
+    h = {"Authorization": f"Bearer {data['access_token']}"}
+    await client.put("/api/settings/ai-config", json={"provider_url": "mock://test", "model_name": "mock-model", "api_key": "sk-test-key"}, headers=h)
+    tmp = tempfile.mkdtemp()
+    r = await client.post("/api/projects", json={"name": "PolProj", "description": "", "project_path": tmp, "tags": [], "status": "active"}, headers=h)
+    pid = r.json()["id"]
+    custom = "POLICY-UNIQUE-123: always check routes first."
+    await client.put(f"/api/projects/{pid}/system-prompt", json={"system_prompt": custom}, headers=h)
+    r = await client.post("/api/tasks", json={"project_id": pid, "title": "T", "description": "rough", "priority": "medium", "status": "todo", "tags": []}, headers=h)
+    tid = r.json()["id"]
+
+    captured = {}
+    real_mock = singleton_agent.ai_provider._mock_generation
+    def fake(sys_prompt, user_prompt, model):
+        captured["system"] = sys_prompt
+        captured["user"] = user_prompt
+        return real_mock(sys_prompt, user_prompt, model)
+    monkeypatch.setattr(singleton_agent.ai_provider, "_mock_generation", fake)
+
+    r = await client.post(f"/api/tasks/{tid}/generate", headers=h)
+    assert r.status_code == 200, r.text
+    assert "POLICY-UNIQUE-123" in captured["system"]
+    assert captured["system"].index("POLICY-UNIQUE-123") < captured["system"].index("Smart Engineering Agent")
+    assert "PROJECT ENGINEERING POLICY" in captured["user"]
+
+@pytest.mark.asyncio
 async def test_task_generation_uses_project_policy(client):
     from app.agents.prompt_manager import PromptManager
     pm = PromptManager("agent-base", project_policy="POLICY: reuse APIs.")

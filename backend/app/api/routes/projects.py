@@ -103,6 +103,12 @@ async def create_project(payload: ProjectCreate, request: Request, owner=Depends
         "updated_at": utc_now(),
     }
     await col.insert_one(doc)
+    # Seed the default test rule + task/feature/bug templates (best-effort).
+    try:
+        from app.agents.project_policy import ensure_project_defaults
+        await ensure_project_defaults(owner["_id"], doc["_id"])
+    except Exception:
+        pass
     return doc_to_resp(doc, 0)
 
 @router.get("/{project_id}", response_model=ProjectResponse)

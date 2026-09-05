@@ -35,6 +35,7 @@ import {
   Trash2,
   Zap,
   Wand2,
+  LayoutTemplate,
 } from 'lucide-react'
 
 const GENERATING_STAGES = [
@@ -64,8 +65,10 @@ export function Tasks() {
     assigned_to: '',
     tags: '',
     task_type: 'task',
+    template_id: '',
   })
   const [tagInput, setTagInput] = useState('')
+  const [projectTemplates, setProjectTemplates] = useState<any[]>([])
   const [selected, setSelected] = useState<any | null>(null)
   const [drawerTab, setDrawerTab] = useState<'edit' | 'preview'>('preview')
   const [versions, setVersions] = useState<any[]>([])
@@ -139,6 +142,34 @@ export function Tasks() {
     } catch {}
   }
 
+  // Templates of the project chosen in the create drawer (optional picker)
+  useEffect(() => {
+    if (!form.project_id || !showCreate) {
+      setProjectTemplates([])
+      return
+    }
+    let cancelled = false
+    api.get(`/projects/${form.project_id}/task-templates`)
+      .then((list: any[]) => {
+        if (cancelled) return
+        setProjectTemplates(list ?? [])
+        setForm((f) => {
+          // keep explicit choice; drop it if it belongs to another project
+          if (f.template_id && (list ?? []).some((t: any) => t.id === f.template_id)) return f
+          // prefer the template matching the task type, else leave empty
+          const match = (list ?? []).find((t: any) => t.type === f.task_type)
+          return { ...f, template_id: match ? match.id : '' }
+        })
+      })
+      .catch(() => {
+        if (!cancelled) setProjectTemplates([])
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.project_id, showCreate])
+
   useEffect(() => {
     load()
     loadMeta()
@@ -207,9 +238,10 @@ export function Tasks() {
           .map((s) => s.trim())
           .filter(Boolean),
         task_type: form.task_type,
+        template_id: form.template_id || null,
       })
       setShowCreate(false)
-      setForm((f) => ({ ...f, title: '', description: '', tags: '', task_type: 'task' }))
+      setForm((f) => ({ ...f, title: '', description: '', tags: '', task_type: 'task', template_id: '' }))
       setTagInput('')
       load()
     } catch (e: any) {
@@ -477,6 +509,8 @@ export function Tasks() {
       priority: t.priority,
       assigned_to: t.assigned_to ?? null,
       task_type: (t as any).task_type ?? 'task',
+      template_id: (t as any).template_id ?? null,
+      template_name: (t as any).template_name ?? null,
       assigned_user_name: t.assigned_user_name ?? null,
       assignees: t.assigned_to ? [{ id: t.assigned_to, name: t.assigned_user_name ?? t.assigned_to }] : [],
       labels: t.tags ?? [],
@@ -703,12 +737,42 @@ export function Tasks() {
                 <select
                   id="task-type"
                   value={form.task_type}
-                  onChange={(e) => setForm({ ...form, task_type: e.target.value })}
+                  onChange={(e) => {
+                    const tt = e.target.value
+                    setForm((f) => {
+                      if (f.template_id) return { ...f, task_type: tt }
+                      const match = projectTemplates.find((t) => t.type === tt)
+                      return { ...f, task_type: tt, template_id: match ? match.id : '' }
+                    })
+                  }}
                   className="input h-11 cursor-pointer appearance-none pr-9 bg-card border-border hover:border-border focus:border-border focus:ring-0 focus-visible:border-border focus-visible:ring-0 focus-visible:ring-offset-0 transition-colors"
                 >
                   <option value="task">Task</option>
                   <option value="bug">Bug</option>
                   <option value="feature">Feature</option>
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="task-template" className="flex items-center gap-2 text-sm font-semibold">
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600"><LayoutTemplate className="h-3.5 w-3.5" aria-hidden="true" /></span>
+                Template <span className="text-xs font-normal text-muted-foreground">— optional</span>
+              </label>
+              <div className="relative">
+                <select
+                  id="task-template"
+                  value={form.template_id}
+                  onChange={(e) => setForm({ ...form, template_id: e.target.value })}
+                  className="input h-11 cursor-pointer appearance-none pr-9 bg-card border-border hover:border-border focus:border-border focus:ring-0 focus-visible:border-border focus-visible:ring-0 focus-visible:ring-offset-0 transition-colors"
+                >
+                  <option value="">No template</option>
+                  {projectTemplates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.type})
+                    </option>
+                  ))}
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               </div>
@@ -1045,6 +1109,11 @@ export function Tasks() {
                         <f.icon className="h-3 w-3" aria-hidden="true" /> {f.label}
                       </span>
                     ))}
+                    {selected.template_name && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-2.5 py-1 text-[11px] font-bold text-white ring-1 ring-white/30 backdrop-blur">
+                        <LayoutTemplate className="h-3 w-3" aria-hidden="true" /> Template: {selected.template_name}
+                      </span>
+                    )}
                   </div>
 
                   {/* generating progress */}

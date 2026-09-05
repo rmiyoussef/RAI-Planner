@@ -8,6 +8,7 @@ from app.core.config import get_settings
 from app.core.database import init_db
 from app.api.routes import auth, projects, tasks, users, dashboard, agent
 from app.api.routes import settings as settings_routes
+from app.api.routes import project_policy
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -89,7 +90,7 @@ app.add_middleware(
 )
 
 # include routers
-for r in [auth.router, projects.router, tasks.router, users.router, dashboard.router, settings_routes.router, agent.router]:
+for r in [auth.router, projects.router, project_policy.router, tasks.router, users.router, dashboard.router, settings_routes.router, agent.router]:
     app.include_router(r, prefix=settings.API_PREFIX)
 
 @app.get("/")

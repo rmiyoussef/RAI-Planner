@@ -41,6 +41,46 @@ class SystemPromptGenerateResponse(BaseModel):
     system_prompt: str
     analysis: dict = Field(default_factory=dict)
 
+TemplateType = Literal["task", "feature", "bug"]
+
+class ProjectRuleCreate(BaseModel):
+    content: str = Field(min_length=1, max_length=5000)
+    enabled: bool = True
+
+class ProjectRuleUpdate(BaseModel):
+    content: Optional[str] = Field(default=None, min_length=1, max_length=5000)
+    enabled: Optional[bool] = None
+    position: Optional[int] = None
+
+class ProjectRuleResponse(BaseModel):
+    id: str
+    project_id: str
+    content: str
+    enabled: bool = True
+    position: int = 0
+    created_at: str
+    updated_at: str
+
+class TaskTemplateCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    type: TemplateType = "task"
+    content: str = Field(default="", max_length=20000)
+
+class TaskTemplateUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    type: Optional[TemplateType] = None
+    content: Optional[str] = Field(default=None, max_length=20000)
+
+class TaskTemplateResponse(BaseModel):
+    id: str
+    project_id: str
+    name: str
+    type: str
+    content: str
+    is_default: bool = False
+    created_at: str
+    updated_at: str
+
 class ProjectListResponse(BaseModel):
     items: List[ProjectResponse]
     total: int

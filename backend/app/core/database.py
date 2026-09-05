@@ -21,6 +21,8 @@ ALLOWED_COLLECTIONS = {
     "agent_skills",
     "agent_settings",
     "skills",
+    "project_rules",
+    "task_templates",
 }
 
 def _validate_collection_name(name: str):

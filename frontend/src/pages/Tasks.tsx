@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { api } from '../api/client'
 import { MarkdownPreview } from '../components/Markdown'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { statusLabel, priorityLabel, statusTone, priorityTone, humanize } from '../utils/taskLabels'
 import { TaskListView } from '../components/tasks/TaskListView'
 import type { TaskItem } from '../components/tasks/types'
@@ -36,6 +36,7 @@ import {
   Zap,
   Wand2,
   LayoutTemplate,
+  ArrowUpRight,
 } from 'lucide-react'
 
 const GENERATING_STAGES = [
@@ -844,7 +845,7 @@ export function Tasks() {
               </div>
             </div>
 
-            <div className="space-y-2 sm:col-span-2">
+            <div className="space-y-2">
               <label htmlFor="task-tags" className="flex items-center justify-between gap-2 text-sm font-semibold">
                 <span className="flex items-center gap-2"><span className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600"><Tag className="h-3.5 w-3.5" aria-hidden="true" /></span> Tags <span className="text-xs font-normal text-muted-foreground">— add many</span></span>
                 <span className="text-[11px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{form.tags.split(',').filter(s=>s.trim()).length} selected</span>
@@ -1227,13 +1228,39 @@ export function Tasks() {
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   {/* Project (read-only) */}
-                  <div className="rounded-xl border border-border bg-muted/30 px-3.5 py-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Project</p>
-                    <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-foreground">
-                      <FolderKanban className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-                      {selectedProjectName}
-                    </p>
-                  </div>
+                  {(() => {
+                    const proj = projects.find((p) => p.id === selected?.project_id)
+                    return (
+                      <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/[0.07] via-card to-card px-3.5 py-3 dark:border-primary/20">
+                        <div className="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-primary/10 blur-2xl" aria-hidden="true" />
+                        <div className="relative flex items-center gap-2.5">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-secondary text-white shadow-sm">
+                            <FolderKanban className="h-4 w-4" aria-hidden="true" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Project</span>
+                            <span className="block truncate text-sm font-bold text-foreground" title={selectedProjectName}>
+                              {selectedProjectName}
+                            </span>
+                          </span>
+                          {typeof proj?.task_count === 'number' && (
+                            <span className="shrink-0 rounded-full bg-primary-light px-2 py-0.5 text-[11px] font-bold tabular-nums text-primary border border-primary/15 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-900/50">
+                              {proj.task_count}
+                            </span>
+                          )}
+                          {selected?.project_id && (
+                            <Link
+                              to={`/projects/${selected.project_id}`}
+                              title="Open project"
+                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground shadow-sm transition-colors hover:border-primary/30 hover:text-primary"
+                            >
+                              <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })()}
 
                   {/* Priority — auto-save */}
                   <div className="space-y-1.5">

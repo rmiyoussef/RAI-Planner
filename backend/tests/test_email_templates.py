@@ -169,7 +169,27 @@ async def test_project_list_reports_framework(client):
 
 def test_blade_smart_analysis():
     from app.services.blade_parser import analyze_blade, extract_defined_variables, render_blade_preview
-    src = open("/tmp/smart.blade").read()
+    # Self-contained fixture (was /tmp/smart.blade — never committed, broke CI/update.sh).
+    src = """<h1>{{ $company_name }}</h1>
+{{-- {{ $in_comment }} --}}
+@verbatim
+<p>{{ $raw_mustache }}</p>
+@endverbatim
+@php
+  $greeting = 'Hi';
+  foreach ($items as $it) { echo $it; }
+@endphp
+@props(['type', 'subject' => 'Hello'])
+@inject('metrics', 'App\\Services\\Metrics')
+@aware(['color' => 'gray'])
+@foreach($employees as $employee)
+  <p>{{ $loop->iteration }} — {{ $employee->name }}</p>
+@endforeach
+@isset($maybe)<p>{{ $maybe }}</p>@endisset
+@error('email')<p>{{ $message }}</p>@enderror
+<p>{{ $attributes }} {{ $errors }} {{ $ghost }}</p>
+<x-input :value="$bound" />
+"""
     assert set(extract_defined_variables(src)) == {
         "greeting", "it", "employee", "metrics", "type", "subject", "color",
     }

@@ -146,7 +146,7 @@ export function EmailTemplateEditor(props: Props) {
   }
 
   function onEditorKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Tab') {
+    if (e.key === 'Tab' && isGeneral) {
       e.preventDefault()
       wrapSelection('  ', '', '')
     }
@@ -267,7 +267,9 @@ export function EmailTemplateEditor(props: Props) {
     return { usedCount, knownCount, allUsed, lastEdit }
   }, [isGeneral, generalVars, currentBladeRaws, unusedKnown, props.template])
 
-  function insertAtCursor(text: string) {    const el = textareaRef.current
+  function insertAtCursor(text: string) {
+    if (!isGeneral) return
+    const el = textareaRef.current
     if (!el) {
       setContent((c) => c + text)
       return
@@ -381,7 +383,7 @@ export function EmailTemplateEditor(props: Props) {
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-[15px] font-semibold tracking-tight">Edit Email Template</h3>
+                <h3 className="text-[15px] font-semibold tracking-tight">{isGeneral ? 'Edit Email Template' : 'View Email Template'}</h3>
                 {isGeneral ? <GeneralEmailTemplateBadge /> : <ProjectEmailTemplateBadge />}
                 {savedTick && <span className="badge badge-success">Saved</span>}
                 {dirty && <span className="badge badge-warn">Unsaved changes</span>}
@@ -408,9 +410,11 @@ export function EmailTemplateEditor(props: Props) {
                 {previewLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />} Preview
               </button>
             </div>
-            <button type="button" onClick={doSave} disabled={!dirty || saving} className="btn btn-primary btn-sm cursor-pointer disabled:opacity-50">
-              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} {saving ? 'Saving…' : 'Save'}
-            </button>
+            {isGeneral && (
+              <button type="button" onClick={doSave} disabled={!dirty || saving} className="btn btn-primary btn-sm cursor-pointer disabled:opacity-50">
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} {saving ? 'Saving…' : 'Save'}
+              </button>
+            )}
             <button type="button" onClick={requestClose} className={CLOSE_BTN_CLS} aria-label="Close drawer">
               <X className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -511,24 +515,26 @@ export function EmailTemplateEditor(props: Props) {
                       <Copy className="h-3.5 w-3.5" /> Copy
                     </button>
                   </div>
-                  <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-border bg-muted/40 p-2" role="toolbar" aria-label="HTML tags">
-                    {HTML_BAR.map((s) => {
-                      const Icon = TOOL_ICONS[s.label]
-                      return (
-                        <button
-                          key={s.label}
-                          type="button"
-                          title={s.title}
-                          aria-label={`Insert ${s.title}`}
-                          onClick={() => wrapSelection(s.before, s.after, s.placeholder)}
-                          className={TOOL_BTN_CLS}
-                        >
-                          {Icon && <Icon className="h-3.5 w-3.5" aria-hidden="true" />}
-                          <span>{s.label}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
+                  {isGeneral && (
+                    <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-border bg-muted/40 p-2" role="toolbar" aria-label="HTML tags">
+                      {HTML_BAR.map((s) => {
+                        const Icon = TOOL_ICONS[s.label]
+                        return (
+                          <button
+                            key={s.label}
+                            type="button"
+                            title={s.title}
+                            aria-label={`Insert ${s.title}`}
+                            onClick={() => wrapSelection(s.before, s.after, s.placeholder)}
+                            className={TOOL_BTN_CLS}
+                          >
+                            {Icon && <Icon className="h-3.5 w-3.5" aria-hidden="true" />}
+                            <span>{s.label}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
                   <div className="overflow-hidden rounded-xl border border-border bg-card transition-all">
                     <div className="flex h-[380px]">
                       <div
@@ -556,10 +562,11 @@ export function EmailTemplateEditor(props: Props) {
                           id="et-content"
                           ref={textareaRef}
                           value={content}
-                          onChange={(e) => setContent(e.target.value.slice(0, 500000))}
+                          onChange={(e) => { if (isGeneral) setContent(e.target.value.slice(0, 500000)) }}
                           onKeyDown={onEditorKeyDown}
                           onScroll={syncScroll}
                           spellCheck={false}
+                          readOnly={!isGeneral}
                           aria-label={isGeneral ? 'HTML editor' : 'Blade editor'}
                           className={`${EDITOR_AREA_CLS} absolute inset-0 h-full resize-none overflow-auto ${find ? 'bg-transparent text-transparent caret-foreground selection:bg-primary/40' : ''}`}
                           placeholder={isGeneral ? '<html>\n  <body>\n    <h1>Welcome {company_name}</h1>\n  </body>\n</html>' : '{{ $company_name }}'}
@@ -651,6 +658,7 @@ export function EmailTemplateEditor(props: Props) {
                   generalVars={generalVars}
                   bladeVars={bladeVars}
                   onInsert={insertAtCursor}
+                  readOnly={!isGeneral}
                 />
               </div>
             </div>

@@ -6,11 +6,13 @@ export function EmailTemplateVariables({
   generalVars = [],
   bladeVars = [],
   onInsert,
+  readOnly = false,
 }: {
   title?: string
   generalVars?: string[]
   bladeVars?: { name: string; raw: string }[]
   onInsert: (text: string) => void
+  readOnly?: boolean
 }) {
   const [q, setQ] = useState('')
   const items = useMemo(() => {
@@ -57,9 +59,11 @@ export function EmailTemplateVariables({
                 <p className="truncate font-mono text-[11px] text-muted-foreground" title={it.sub}>{it.sub}</p>
               )}
             </div>
-            <button type="button" onClick={() => onInsert(it.insert)} className="btn btn-outline btn-sm shrink-0 cursor-pointer" aria-label={`Insert ${it.label}`}>
-              <Plus className="h-3 w-3" /> Insert
-            </button>
+            {!readOnly && (
+              <button type="button" onClick={() => onInsert(it.insert)} className="btn btn-outline btn-sm shrink-0 cursor-pointer" aria-label={`Insert ${it.label}`}>
+                <Plus className="h-3 w-3" /> Insert
+              </button>
+            )}
           </div>
         ))}
       </div>

@@ -176,6 +176,153 @@ export function isLaravelProject(framework: string | undefined | null): boolean 
   return (framework || '').toLowerCase() === 'laravel'
 }
 
+/* ---- Smart Blade analysis (mirrors backend blade_parser.analyze_blade) ----
+   Knows Laravel scoping: @php blocks, loop vars, @inject, @props/@aware,
+   $errors/$attributes/$slot, $loop in loops, @isset/@empty guards,
+   $message in @error blocks; ignores comments and @verbatim. */
+
+const BLADE_ALWAYS_KNOWN = new Set(['errors', 'attributes', 'slot'])
+
+function stripBladeNoise(content: string): string {
+  return (content || '')
+    .replace(/\{\{--.*?--\}\}/gs, '')
+    .replace(/@verbatim.*?@endverbatim/gsi, '')
+}
+
+function bladeDefinedInPhp(code: string, store: Set<string>) {
+  let m: RegExpExecArray | null
+  const fe = /foreach\s*\(.+?\bas\s+(\$[a-zA-Z_][a-zA-Z0-9_]*)(?:\s*=>\s*(\$[a-zA-Z_][a-zA-Z0-9_]*))?/gsi
+  while ((m = fe.exec(code))) {
+    store.add(m[1].slice(1))
+    if (m[2]) store.add(m[2].slice(1))
+  }
+  const fr = /for\s*\(\s*(\$[a-zA-Z_][a-zA-Z0-9_]*)/gi
+  while ((m = fr.exec(code))) store.add(m[1].slice(1))
+  const ct = /catch\s*\([^)]*?(\$[a-zA-Z_][a-zA-Z0-9_]*)/gi
+  while ((m = ct.exec(code))) store.add(m[1].slice(1))
+  const as = /(?<![\$>:=\-a-zA-Z_])\$([a-zA-Z_][a-zA-Z0-9_]*)\s*=(?![=>])/g
+  while ((m = as.exec(code))) store.add(m[1])
+}
+
+function bladeBlockRanges(body: string): { loop: [number, number][]; error: [number, number][] } {
+  const opens: Record<string, 'loop' | 'error'> = { foreach: 'loop', forelse: 'loop', error: 'error' }
+  const closes: Record<string, 'loop' | 'error'> = { endforeach: 'loop', endforelse: 'loop', enderror: 'error' }
+  const stack: { kind: 'loop' | 'error'; start: number }[] = []
+  const ranges: { loop: [number, number][]; error: [number, number][] } = { loop: [], error: [] }
+  const tok = /@(\w+)/gi
+  let m: RegExpExecArray | null
+  while ((m = tok.exec(body))) {
+    const name = m[1].toLowerCase()
+    if (opens[name]) stack.push({ kind: opens[name], start: m.index })
+    else if (closes[name]) {
+      for (let i = stack.length - 1; i >= 0; i--) {
+        if (stack[i].kind === closes[name]) {
+          const [op] = stack.splice(i, 1)
+          ranges[closes[name]].push([op.start, m.index + m[0].length])
+          break
+        }
+      }
+    }
+  }
+  return ranges
+}
+
+function bladeVarBase(expr: string): { base: string; friendly: string } | null {
+  const vm = /\$([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*->\s*([a-zA-Z_][a-zA-Z0-9_]*))?/.exec(expr)
+  if (vm) return { base: vm[1], friendly: vm[2] ? `${vm[1]}.${vm[2]}` : vm[1] }
+  const bare = /[a-zA-Z_][a-zA-Z0-9_]*/.exec(expr)
+  if (!bare) return null
+  if (['if', 'else', 'foreach', 'echo', 'empty', 'isset', 'true', 'false', 'null'].includes(bare[0].toLowerCase())) return null
+  return { base: bare[0], friendly: bare[0] }
+}
+
+export type BladeUnknown = { name: string; raw: string }
+export type BladeAnalysis = { used: string[]; defined: string[]; unknown: BladeUnknown[] }
+
+export function analyzeBladeClient(content: string, known: string[] = []): BladeAnalysis {
+  const body = stripBladeNoise(content)
+  const knownBases = new Set((known || []).map((k) => String(k).split('.')[0].replace(/^\$/, '')).filter(Boolean))
+  const defined = new Set<string>()
+  let m: RegExpExecArray | null
+
+  const php = /@php(.*?)@endphp/gsi
+  while ((m = php.exec(body))) bladeDefinedInPhp(m[1], defined)
+  const phpInline = /@php\(([^)]*)\)/gi
+  while ((m = phpInline.exec(body))) bladeDefinedInPhp(m[1], defined)
+  const loop = /@(?:foreach|forelse)\s*\(.+?\bas\s+(\$[a-zA-Z_][a-zA-Z0-9_]*)(?:\s*=>\s*(\$[a-zA-Z_][a-zA-Z0-9_]*))?/gsi
+  while ((m = loop.exec(body))) {
+    defined.add(m[1].slice(1))
+    if (m[2]) defined.add(m[2].slice(1))
+  }
+  const fr = /@for\s*\(\s*(\$[a-zA-Z_][a-zA-Z0-9_]*)/gi
+  while ((m = fr.exec(body))) defined.add(m[1].slice(1))
+  const inj = /@inject\s*\(\s*['"]([a-zA-Z_][a-zA-Z0-9_]*)['"]/gi
+  while ((m = inj.exec(body))) defined.add(m[1])
+  const pp = /@(?:props|aware)\s*\(\s*\[(.*?)\]\)/gsi
+  while ((m = pp.exec(body))) {
+    const inner = m[1]
+    const keys = /['"]([a-zA-Z_][a-zA-Z0-9_]*)['"]\s*=>/g
+    let k: RegExpExecArray | null
+    while ((k = keys.exec(inner))) defined.add(k[1])
+    const bare = /['"]([a-zA-Z_][a-zA-Z0-9_]*)['"]/g
+    let b: RegExpExecArray | null
+    const noDefaults = inner.replace(/=>[^,]+/g, '')
+    while ((b = bare.exec(noDefaults))) defined.add(b[1])
+  }
+
+  const ranges = bladeBlockRanges(body)
+  const guarded = new Set<string>()
+  const gr = /@(isset|empty)\s*\((.*?)\)/gsi
+  while ((m = gr.exec(body))) {
+    const vm = /\$([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*->\s*[a-zA-Z_][a-zA-Z0-9_]*)?/g
+    let v: RegExpExecArray | null
+    while ((v = vm.exec(m[2]))) guarded.add(v[1])
+  }
+
+  const allowed = new Set([...knownBases, ...defined, ...BLADE_ALWAYS_KNOWN, ...guarded])
+  const inRanges = (pos: number, rs: [number, number][]) => rs.some(([s, e]) => s <= pos && pos <= e)
+  const used = new Map<string, string>()
+  const unknown = new Map<string, BladeUnknown>()
+  const consider = (base: string, friendly: string, raw: string, pos: number) => {
+    if (!base) return
+    if (!used.has(friendly)) used.set(friendly, raw.trim().slice(0, 300))
+    if (allowed.has(base)) return
+    if (base === 'loop' && inRanges(pos, ranges.loop)) return
+    if (base === 'message' && inRanges(pos, ranges.error)) return
+    const key = raw.replace(/\s+/g, ' ').trim().slice(0, 300)
+    if (key && !unknown.has(key)) unknown.set(key, { name: friendly, raw: key })
+  }
+
+  const echo = /\{\!\!\s*(.+?)\s*\!\!\}|\{\{\s*(.+?)\s*\}\}/gs
+  while ((m = echo.exec(body))) {
+    const expr = (m[1] ?? m[2] ?? '').trim()
+    const hit = bladeVarBase(expr)
+    // register every $var inside (ternary/coalesce), else the bare name
+    const vm = /\$([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*->\s*([a-zA-Z_][a-zA-Z0-9_]*))?/g
+    let v: RegExpExecArray | null
+    let found = false
+    while ((v = vm.exec(expr))) {
+      found = true
+      consider(v[1], v[2] ? `${v[1]}.${v[2]}` : v[1], m[0], m.index)
+    }
+    if (!found && hit) consider(hit.base, hit.friendly, m[0], m.index)
+  }
+  const dir = /@(if|elseif|unless|isset|empty|foreach|forelse|for|while|switch|case|include|each|checked|selected|disabled|readonly|required|json|js|class|style)\s*\((.*?)\)/gsi
+  while ((m = dir.exec(body))) {
+    const vm = /\$([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*->\s*([a-zA-Z_][a-zA-Z0-9_]*))?/g
+    let v: RegExpExecArray | null
+    while ((v = vm.exec(m[2]))) consider(v[1], v[2] ? `${v[1]}.${v[2]}` : v[1], m[0], m.index)
+  }
+  const bind = /:[a-zA-Z_][\w\-.]*\s*=\s*"([^"]*)"/g
+  while ((m = bind.exec(body))) {
+    const vm = /\$([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*->\s*([a-zA-Z_][a-zA-Z0-9_]*))?/g
+    let v: RegExpExecArray | null
+    while ((v = vm.exec(m[1]))) consider(v[1], v[2] ? `${v[1]}.${v[2]}` : v[1], v[0], m.index)
+  }
+
+  return { used: [...used.keys()].sort(), defined: [...defined].sort(), unknown: [...unknown.values()] }
+}
+
 /** Instant client-side general preview — always replaces {var} with dummy data. */
 export function previewGeneralClient(content: string): string {
   return (content || '').replace(/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g, (_, v: string) => dummyFor(v))
@@ -183,7 +330,7 @@ export function previewGeneralClient(content: string): string {
 
 /** Instant client-side Blade preview — always replaces {{ }}/{!! !!} (with or without $) with dummy data. */
 export function previewBladeClient(content: string): string {
-  let out = content || ''
+  let out = stripBladeNoise(content || '')
   out = out.replace(/\{\!\!\s*(.+?)\s*\!\!\}|\{\{\s*(.+?)\s*\}\}/gs, (_full, g1: string, g2: string) => {
     const expr = (g1 ?? g2 ?? '').trim()
     const vm = /\$([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*->\s*([a-zA-Z_][a-zA-Z0-9_]*))?/.exec(expr)
@@ -192,6 +339,8 @@ export function previewBladeClient(content: string): string {
     if (bare) return dummyFor(bare[0])
     return 'Sample Value'
   })
+  // @php blocks are logic, never output — drop them like the server does
+  out = out.replace(/@php.*?@endphp/gsi, '')
   out = out.replace(/@\w+(\s*\(.*?\))?/gs, '')
   return out
 }

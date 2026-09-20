@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
-import { extractGeneralVarsClient, extractBladeRawsClient, normalizeBladeRaw, isLaravelProject, previewBladeClient, previewGeneralClient } from '../api/emailTemplates'
+import { extractGeneralVarsClient, extractBladeRawsClient, normalizeBladeRaw, isLaravelProject, analyzeBladeClient, previewBladeClient, previewGeneralClient } from '../api/emailTemplates'
 import { GeneralEmailTemplateBadge, ProjectEmailTemplateBadge } from '../components/email/TemplateBadges'
 import { EmailTemplatePreview } from '../components/email/EmailTemplatePreview'
 
@@ -26,6 +26,18 @@ describe('email template preview (always dummy data)', () => {
     expect(previewBladeClient('<p>{{$company_name}}</p>')).toContain('Acme Corporation')
     expect(previewBladeClient('<p>{{ $company_name }}</p>')).not.toContain('{{')
   })
+  it('strips comments, verbatim and @php logic from blade preview', () => {
+    const out = previewBladeClient(
+      '{{-- {{ $in_comment }} --}}\n@verbatim {{ $raw }} @endverbatim\n@php $g = 1; @endphp\n<h1>{{ $company_name }}</h1>',
+    )
+    expect(out).not.toContain('in_comment')
+    expect(out).not.toContain('--}}')
+    expect(out).not.toContain('$raw')
+    expect(out).not.toContain('@verbatim')
+    expect(out).not.toContain('$g')
+    expect(out).not.toContain('@php')
+    expect(out).toContain('Acme Corporation')
+  })
 })
 describe('blade raw extraction (client)', () => {
   it('extracts {{ }} and {!! !!} raws, deduped and normalized', () => {
@@ -48,6 +60,38 @@ describe('laravel project filter', () => {
   })
 })
 
+describe('smart blade analysis (client)', () => {
+  const src = [
+    '{{-- {{ $in_comment }} --}}',
+    '@verbatim {{ $raw }} @endverbatim',
+    "@php $greeting = 'Hi'; @endphp",
+    "@props(['type', 'subject' => 'Hello'])",
+    "@inject('metrics', 'App\\Metrics')",
+    '@foreach($employees as $employee)',
+    '<p>{{ $loop->iteration }} {{ $employee->name }}</p>',
+    '@endforeach',
+    '@isset($maybe)<p>{{ $maybe }}</p>@endisset',
+    "@error('email')<p>{{ $message }}</p>@enderror",
+    '<p>{{ $company_name }} {{ $ghost }}</p>',
+  ].join('\n')
+
+  it('finds defined vars and only flags truly-external unknowns', () => {
+    const r = analyzeBladeClient(src, ['company_name'])
+    expect(r.defined).toEqual(expect.arrayContaining(['greeting', 'employee', 'metrics', 'type', 'subject']))
+    expect(r.defined).not.toContain('Hello') // prop default value, not a prop
+    const names = r.unknown.map((u) => u.name)
+    expect(names).toEqual(expect.arrayContaining(['ghost', 'employees']))
+    for (const legit of ['company_name', 'loop', 'maybe', 'message', 'greeting', 'employee', 'metrics', 'type']) {
+      expect(names).not.toContain(legit)
+    }
+    expect(r.unknown.find((u) => u.name === 'ghost')?.raw).toBe('{{ $ghost }}')
+  })
+
+  it('ignores comments and verbatim', () => {
+    const r = analyzeBladeClient('{{-- {{ $a }} --}} @verbatim {{ $b }} @endverbatim {{ $c }}')
+    expect(r.unknown.map((u) => u.name)).toEqual(['c'])
+  })
+})
 describe('email template badges', () => {
   it('renders GENERAL and PROJECT badges', () => {
     const g = render(<GeneralEmailTemplateBadge />)

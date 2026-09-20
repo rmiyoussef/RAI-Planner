@@ -1,7 +1,7 @@
 """Email Templates: general (DB-owned) + project backend (filesystem-owned)."""
 from fastapi import APIRouter, Depends, HTTPException, Request
 from app.schemas.email_template import (
-    EmailTemplateCreate, EmailTemplateUpdate, EmailTemplateResponse,
+    EmailTemplateCreate, EmailTemplateUpdate, EmailTemplateResponse, EmailTemplateVariable,
     ProjectEmailTemplateMeta, ProjectEmailTemplateDetail, ProjectEmailTemplateUpdate,
     EmailPreviewRequest, EmailPreviewResponse,
 )
@@ -107,7 +107,12 @@ async def delete_general(template_id: str, owner=Depends(get_current_owner)):
 async def preview_general(payload: EmailPreviewRequest, request: Request, owner=Depends(get_current_owner)):
     rate_limit(request, "preview_email_template", limit=60, window_seconds=60)
     if payload.kind == "blade":
-        return EmailPreviewResponse(html=render_blade_preview(payload.content), mock=True)
+        from app.services.blade_parser import analyze_blade
+        analysis = analyze_blade(payload.content, known=[])
+        return EmailPreviewResponse(
+            html=render_blade_preview(payload.content), mock=True,
+            unknown_variables=[EmailTemplateVariable(**u) for u in analysis["unknown"]],
+        )
     return EmailPreviewResponse(html=render_general_preview(payload.content), mock=True)
 
 

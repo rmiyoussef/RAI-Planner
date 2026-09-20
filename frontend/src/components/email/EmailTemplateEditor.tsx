@@ -4,7 +4,8 @@ import { EmailTemplateVariables } from './EmailTemplateVariables'
 import { EmailTemplatePreview } from './EmailTemplatePreview'
 import { GeneralEmailTemplateBadge, ProjectEmailTemplateBadge } from './TemplateBadges'
 import {
-  emailApi, extractGeneralVarsClient, extractBladeRawsClient, normalizeBladeRaw, previewGeneralClient, previewBladeClient,
+  emailApi, extractGeneralVarsClient, extractBladeRawsClient, normalizeBladeRaw, analyzeBladeClient,
+  previewGeneralClient, previewBladeClient,
   type GeneralEmailTemplate, type ProjectEmailTemplate,
 } from '../../api/emailTemplates'
 
@@ -62,7 +63,9 @@ export function EmailTemplateEditor(props: Props) {
   const gutterRef = useRef<HTMLDivElement>(null)
   const backdropRef = useRef<HTMLDivElement>(null)
   const initialRef = useRef('')
-  const initialVarsRef = useRef<{ general: string[]; blade: string[] }>({ general: [], blade: [] })
+  const initialVarsRef = useRef<{ general: string[]; bladeRaws: string[]; bladeNames: string[] }>(
+    { general: [], bladeRaws: [], bladeNames: [] },
+  )
 
   const templateId = props.template.id
   const projectId = !isGeneral ? (props as Extract<Props, { kind: 'project' }>).projectId : ''
@@ -78,7 +81,7 @@ export function EmailTemplateEditor(props: Props) {
           if (!cancelled) {
             setContent(t.content || '')
             initialRef.current = t.content || ''
-            initialVarsRef.current = { general: extractGeneralVarsClient(t.content || ''), blade: [] }
+            initialVarsRef.current = { general: extractGeneralVarsClient(t.content || ''), bladeRaws: [], bladeNames: [] }
           }
         } else {
           // Always read current file when opening
@@ -88,7 +91,8 @@ export function EmailTemplateEditor(props: Props) {
             initialRef.current = detail.content || ''
             initialVarsRef.current = {
               general: [],
-              blade: (detail.variables || []).map((v) => normalizeBladeRaw(v.raw)),
+              bladeRaws: (detail.variables || []).map((v) => normalizeBladeRaw(v.raw)),
+              bladeNames: (detail.variables || []).map((v) => v.name),
             }
             ;(props as Extract<Props, { kind: 'project' }>).onSaved(detail)
           }
@@ -220,7 +224,16 @@ export function EmailTemplateEditor(props: Props) {
     }
   }
 
-  // ---- Unknown (manually added) variables + summary ----
+  // ---- Smart Blade analysis: unknown (manually added) variables + summary ----
+  // Understands Laravel scoping — @php blocks, loop vars, @inject, @props/@aware,
+  // $errors/$attributes/$slot, $loop in loops, @isset/@empty guards, $message in
+  // @error blocks; ignores comments and @verbatim. Only truly external vars warn.
+  const bladeAnalysis = useMemo(
+    () => (isGeneral ? null : analyzeBladeClient(content, initialVarsRef.current.bladeNames)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [content, isGeneral, props.template],
+  )
+
   const currentBladeRaws = useMemo(() => (isGeneral ? [] : extractBladeRawsClient(content)), [content, isGeneral])
 
   const unknownVars = useMemo(() => {
@@ -228,22 +241,21 @@ export function EmailTemplateEditor(props: Props) {
       const known = new Set(initialVarsRef.current.general)
       return generalVars.filter((v) => !known.has(v)).map((v) => `{${v}}`)
     }
-    const known = new Set(initialVarsRef.current.blade)
-    return currentBladeRaws.filter((r) => !known.has(normalizeBladeRaw(r)))
-  }, [isGeneral, generalVars, currentBladeRaws, content])
+    return (bladeAnalysis?.unknown || []).map((u) => u.raw)
+  }, [isGeneral, generalVars, bladeAnalysis, content])
 
   const unusedKnown = useMemo(() => {
     if (isGeneral) {
       const used = new Set(generalVars)
       return initialVarsRef.current.general.filter((v) => !used.has(v)).map((v) => `{${v}}`)
     }
-    const used = new Set(currentBladeRaws.map(normalizeBladeRaw))
-    return initialVarsRef.current.blade.filter((r) => !used.has(r))
-  }, [isGeneral, generalVars, currentBladeRaws, content])
+    const usedBases = new Set((bladeAnalysis?.used || []).map((n) => n.split('.')[0]))
+    return initialVarsRef.current.bladeNames.filter((n) => !usedBases.has(n.split('.')[0]))
+  }, [isGeneral, generalVars, bladeAnalysis, content])
 
   const summary = useMemo(() => {
     const usedCount = isGeneral ? generalVars.length : currentBladeRaws.length
-    const knownCount = isGeneral ? initialVarsRef.current.general.length : initialVarsRef.current.blade.length
+    const knownCount = isGeneral ? initialVarsRef.current.general.length : initialVarsRef.current.bladeNames.length
     const allUsed = unusedKnown.length === 0
     const tpl = props.template as GeneralEmailTemplate & ProjectEmailTemplate
     const rawUpdated = (tpl as GeneralEmailTemplate).updated_at ?? (tpl as ProjectEmailTemplate).updatedAt ?? ''
@@ -302,14 +314,15 @@ export function EmailTemplateEditor(props: Props) {
       if (isGeneral) {
         const updated = await emailApi.updateGeneral(templateId, { name: name.trim(), description, content })
         initialRef.current = updated.content
-        initialVarsRef.current = { general: updated.variables || extractGeneralVarsClient(updated.content), blade: [] }
+        initialVarsRef.current = { general: updated.variables || extractGeneralVarsClient(updated.content), bladeRaws: [], bladeNames: [] }
         ;(props as Extract<Props, { kind: 'general' }>).onSaved(updated)
       } else {
         const updated = await emailApi.saveProjectTemplate(projectId, templateId, content)
         initialRef.current = updated.content || content
         initialVarsRef.current = {
           general: [],
-          blade: (updated.variables || []).map((v) => normalizeBladeRaw(v.raw)),
+          bladeRaws: (updated.variables || []).map((v) => normalizeBladeRaw(v.raw)),
+          bladeNames: (updated.variables || []).map((v) => v.name),
         }
         ;(props as Extract<Props, { kind: 'project' }>).onSaved(updated)
       }
@@ -359,7 +372,7 @@ export function EmailTemplateEditor(props: Props) {
   return (
     <div className="fixed inset-0 z-[60] flex justify-end" role="dialog" aria-modal="true" aria-label="Edit email template">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onClick={requestClose} aria-hidden="true" />
-      <div className="relative flex h-dvh w-full flex-col bg-card shadow-2xl border-l border-border dark:bg-slate-900 lg:w-[60vw] lg:max-w-[65vw] animate-in motion-reduce:animate-none">
+      <div className="relative flex h-dvh w-full flex-col bg-card shadow-2xl border-l border-border dark:bg-slate-900 lg:w-[80vw] lg:max-w-[85vw] animate-in motion-reduce:animate-none">
         {/* Header — same as view task drawer */}
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border bg-gradient-to-r from-primary/[0.04] via-transparent to-transparent px-5 py-4 dark:from-white/[0.04] dark:bg-slate-900 sm:px-6">
           <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -558,7 +571,8 @@ export function EmailTemplateEditor(props: Props) {
                     <div role="alert" className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs font-medium text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-300">
                       <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
                       <p className="flex-1">
-                        Unknown variable{unknownVars.length === 1 ? '' : 's'} — not in the original template:{' '}
+                        Possibly undefined variable{unknownVars.length === 1 ? '' : 's'} — not passed to this view
+                        {!isGeneral && ' and not defined by @php, @foreach, @props or @inject here'}:{' '}
                         <span className="font-mono font-semibold">{unknownVars.slice(0, 8).join(', ')}</span>
                         {unknownVars.length > 8 && ` +${unknownVars.length - 8} more`}
                       </p>
@@ -591,6 +605,13 @@ export function EmailTemplateEditor(props: Props) {
                         <dd className="font-semibold">{summary.lastEdit}</dd>
                       </div>
                     </dl>
+                    {!isGeneral && (bladeAnalysis?.defined.length ?? 0) > 0 && (
+                      <p className="border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
+                        <span className="font-semibold text-foreground">Defined in template (@php, loops, @props, @inject):</span>{' '}
+                        <span className="font-mono">{bladeAnalysis!.defined.slice(0, 12).join(', ')}</span>
+                        {bladeAnalysis!.defined.length > 12 && ` +${bladeAnalysis!.defined.length - 12} more`}
+                      </p>
+                    )}
                     <div className="space-y-1.5 border-t border-border px-4 py-3 text-xs">
                       {summary.allUsed ? (
                         <p className="flex items-center gap-1.5 font-medium text-emerald-700 dark:text-emerald-300">

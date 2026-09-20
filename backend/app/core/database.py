@@ -23,6 +23,7 @@ ALLOWED_COLLECTIONS = {
     "skills",
     "project_rules",
     "task_templates",
+    "email_templates",
 }
 
 def _validate_collection_name(name: str):
@@ -321,7 +322,7 @@ async def init_db():
             async with _pg_pool.acquire() as conn:
                 await conn.execute('SELECT 1')
             # ensure core tables exist
-            for t in ["owners", "company_settings", "projects", "tasks", "task_versions", "task_activities", "users", "ai_configs", "agent_skills"]:
+            for t in ["owners", "company_settings", "projects", "tasks", "task_versions", "task_activities", "users", "ai_configs", "agent_skills", "project_rules", "task_templates", "email_templates"]:
                 await _ensure_pg_table(_pg_pool, t)
             # migrate from file if postgres empty but file has data
             try:
@@ -392,7 +393,7 @@ async def clear_memory_db():
         try:
             async with _pg_pool.acquire() as conn:
                 # get all tables we know
-                for t in ["owners", "company_settings", "projects", "tasks", "task_versions", "task_activities", "users", "ai_configs", "agent_skills"]:
+                for t in ["owners", "company_settings", "projects", "tasks", "task_versions", "task_activities", "users", "ai_configs", "agent_skills", "project_rules", "task_templates", "email_templates"]:
                     try:
                         safe = '"' + t.replace('"', '""') + '"'
                         await conn.execute(f'DELETE FROM {safe}')

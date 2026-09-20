@@ -9,6 +9,7 @@ import { ProjectDetail } from './pages/ProjectDetail'
 import { Tasks } from './pages/Tasks'
 import { Users } from './pages/Users'
 import { Settings } from './pages/Settings'
+import { EmailTemplates } from './pages/EmailTemplates'
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { owner, loading, token } = useAuth()
@@ -36,6 +37,7 @@ export default function App() {
             <Route path="/projects" element={<Projects />} />
             <Route path="/projects/:id" element={<ProjectDetail />} />
             <Route path="/tasks" element={<Tasks />} />
+            <Route path="/email-templates" element={<EmailTemplates />} />
             <Route path="/users" element={<Users />} />
             <Route path="/settings" element={<Settings />} />
           </Route>

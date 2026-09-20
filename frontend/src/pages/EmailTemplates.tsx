@@ -3,6 +3,7 @@ import { Mail, Plus, RefreshCw, Loader2, AlertCircle, X, ChevronDown, Package, F
 import { emailApi, isLaravelProject, type GeneralEmailTemplate, type ProjectEmailTemplate } from '../api/emailTemplates'
 import { GeneralEmailTemplateBadge, ProjectEmailTemplateBadge } from '../components/email/TemplateBadges'
 import { EmailTemplateEditor } from '../components/email/EmailTemplateEditor'
+import { EmailTemplateCreator } from '../components/email/EmailTemplateCreator'
 
 type TypeFilter = 'all' | 'general' | 'project'
 
@@ -16,8 +17,6 @@ export function EmailTemplates() {
   const [scanning, setScanning] = useState(false)
   const [error, setError] = useState('')
   const [showCreate, setShowCreate] = useState(false)
-  const [createKind, setCreateKind] = useState<'general' | 'project'>('general')
-  const [form, setForm] = useState({ name: '', description: '', content: '<html>\n  <body>\n    <h1>Welcome {company_name}</h1>\n    <p>Hello {employee_name}</p>\n    <a href="{login_url}">Login</a>\n  </body>\n</html>' })
   const [editingGeneral, setEditingGeneral] = useState<GeneralEmailTemplate | null>(null)
   const [editingProject, setEditingProject] = useState<{ tpl: ProjectEmailTemplate; pid: string } | null>(null)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
@@ -197,16 +196,10 @@ export function EmailTemplates() {
     )
   }
 
-  async function createGeneral() {
-    try {
-      const t = await emailApi.createGeneral({ name: form.name.trim(), description: form.description.trim(), content: form.content })
-      setGeneral((arr) => [t, ...arr])
-      setShowCreate(false)
-      setForm({ name: '', description: '', content: '' })
-      setEditingGeneral(t)
-    } catch (e: any) {
-      setError(e.message || 'Could not create template.')
-    }
+  function handleCreated(t: GeneralEmailTemplate) {
+    setGeneral((arr) => [t, ...arr])
+    setShowCreate(false)
+    setEditingGeneral(t)
   }
 
   return (
@@ -239,41 +232,12 @@ export function EmailTemplates() {
         </div>
       )}
 
+      {/* Create drawer — same style as edit email template drawer */}
       {showCreate && (
-        <div className="card space-y-4">
-          <div className="flex gap-2" role="tablist" aria-label="Template type">
-            {(['general', 'project'] as const).map((k) => (
-              <button
-                key={k}
-                type="button"
-                role="tab"
-                aria-selected={createKind === k}
-                onClick={() => setCreateKind(k)}
-                className={`btn btn-sm cursor-pointer ${createKind === k ? 'btn-primary' : 'btn-outline'}`}
-              >
-                {k === 'general' ? 'General Template' : 'Project Backend Template'}
-              </button>
-            ))}
-          </div>
-          {createKind === 'general' ? (
-            <div className="grid grid-cols-1 gap-4">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value.slice(0, 200) })} placeholder="Template name *" aria-label="Template name" className="input cursor-text" />
-                <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value.slice(0, 5000) })} placeholder="Description (optional)" aria-label="Description" className="input cursor-text" />
-              </div>
-              <textarea value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value.slice(0, 200000) })} rows={8} spellCheck={false} aria-label="HTML content" className="input min-h-[180px] resize-y py-3 font-mono text-[13px]" />
-              <div className="flex justify-end gap-2">
-                <button type="button" onClick={() => setShowCreate(false)} className="btn btn-ghost">Cancel</button>
-                <button type="button" onClick={createGeneral} disabled={!form.name.trim()} className="btn btn-primary disabled:opacity-50">Create Template</button>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-xl border border-border bg-muted/20 px-4 py-6 text-sm text-muted-foreground">
-              <p className="font-semibold text-foreground">Prefer selecting an existing discovered backend template.</p>
-              <p className="mt-1">Select a project below to scan <span className="font-mono">resources/views/emails</span> and <span className="font-mono">Modules/*/resources/views/emails</span>. New source files are not created here.</p>
-            </div>
-          )}
-        </div>
+        <EmailTemplateCreator
+          onCreated={handleCreated}
+          onClose={() => setShowCreate(false)}
+        />
       )}
 
       <div className="card flex flex-col gap-3 sm:flex-row sm:items-center">

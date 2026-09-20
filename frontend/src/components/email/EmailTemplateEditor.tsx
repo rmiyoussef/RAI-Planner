@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Eye, Save, Copy, Loader2, AlertCircle, AlertTriangle, X, Search, Pencil, RefreshCw, Mail, Type, FileText, Code2, Braces, Clock3, Check, ChevronUp, ChevronDown, Heading1, Heading2, Pilcrow, Bold, Italic, Link as LinkIcon, ExternalLink, Image as ImageIcon, List, Table, Minus } from 'lucide-react'
+import { Save, Copy, Loader2, AlertCircle, AlertTriangle, X, Search, Mail, Type, FileText, Code2, Braces, Clock3, Check, ChevronUp, ChevronDown, Heading1, Heading2, Pilcrow, Bold, Italic, Link as LinkIcon, ExternalLink, Image as ImageIcon, List, Table, Minus } from 'lucide-react'
 import { EmailTemplateVariables } from './EmailTemplateVariables'
 import { EmailTemplatePreview } from './EmailTemplatePreview'
 import { GeneralEmailTemplateBadge, ProjectEmailTemplateBadge } from './TemplateBadges'
@@ -50,9 +50,6 @@ export function EmailTemplateEditor(props: Props) {
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [tab, setTab] = useState<'edit' | 'preview'>('edit')
-  const [previewHtml, setPreviewHtml] = useState('')
-  const [previewLoading, setPreviewLoading] = useState(false)
   const [error, setError] = useState('')
   const [savedTick, setSavedTick] = useState(false)
   const [confirmSave, setConfirmSave] = useState(false)
@@ -284,25 +281,6 @@ export function EmailTemplateEditor(props: Props) {
     })
   }
 
-  async function fetchServerPreview() {
-    setPreviewLoading(true)
-    try {
-      const html = await emailApi.preview(content, isGeneral ? 'general' : 'blade')
-      setPreviewHtml(html)
-    } catch (e: any) {
-      // fall back to instant client preview (already dummy-substituted)
-      setPreviewHtml(livePreview)
-      setError(e.message || 'Preview failed.')
-    } finally {
-      setPreviewLoading(false)
-    }
-  }
-
-  function openPreviewTab() {
-    setTab('preview')
-    fetchServerPreview()
-  }
-
   async function doSave() {
     if (!dirty || saving) return
     // Project files: explicit confirmation first time
@@ -396,20 +374,6 @@ export function EmailTemplateEditor(props: Props) {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <div className="flex gap-1 rounded-xl border border-border bg-muted/40 p-1" role="tablist" aria-label="Editor view">
-              <button
-                type="button" role="tab" aria-selected={tab === 'edit'} onClick={() => setTab('edit')}
-                className={`btn btn-sm cursor-pointer border-0 ${tab === 'edit' ? 'btn-primary' : 'btn-ghost'}`}
-              >
-                <Pencil className="h-3.5 w-3.5" /> Edit
-              </button>
-              <button
-                type="button" role="tab" aria-selected={tab === 'preview'} onClick={openPreviewTab}
-                className={`btn btn-sm cursor-pointer border-0 ${tab === 'preview' ? 'btn-primary' : 'btn-ghost'}`}
-              >
-                {previewLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />} Preview
-              </button>
-            </div>
             {isGeneral && (
               <button type="button" onClick={doSave} disabled={!dirty || saving} className="btn btn-primary btn-sm cursor-pointer disabled:opacity-50">
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} {saving ? 'Saving…' : 'Save'}
@@ -433,24 +397,6 @@ export function EmailTemplateEditor(props: Props) {
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading template…
-            </div>
-          ) : tab === 'preview' ? (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs text-muted-foreground">
-                  Variables always replaced with dummy data — never executes PHP.
-                </p>
-                <button type="button" onClick={fetchServerPreview} disabled={previewLoading} className="btn btn-outline btn-sm cursor-pointer">
-                  {previewLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Refresh
-                </button>
-              </div>
-              {previewLoading && !previewHtml ? (
-                <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Rendering preview…
-                </div>
-              ) : (
-                <EmailTemplatePreview html={previewHtml || livePreview} mock />
-              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_280px]">

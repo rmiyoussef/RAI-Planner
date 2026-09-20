@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   FolderKanban,
   CheckSquare,
+  Mail,
   Users,
   Settings,
   LogOut,
@@ -84,6 +85,7 @@ export function Layout() {
     { to: '/', label: 'Home', icon: LayoutDashboard },
     { to: '/projects', label: 'Projects', icon: FolderKanban },
     { to: '/tasks', label: 'Tasks', icon: CheckSquare },
+    { to: '/email-templates', label: 'Email Templates', icon: Mail },
     { to: '/users', label: 'Users', icon: Users },
     { to: '/settings', label: 'Settings', icon: Settings },
   ]

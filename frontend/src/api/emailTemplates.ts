@@ -86,9 +86,9 @@ export const emailApi = {
   async deleteGeneral(id: string): Promise<void> {
     await api.delete(`/email-templates/${id}`)
   },
-  async listProjects(): Promise<{ id: string; name: string }[]> {
+  async listProjects(): Promise<{ id: string; name: string; framework: string }[]> {
     const data = await api.get('/projects?limit=100')
-    return (data.items || []).map((p: any) => ({ id: p.id, name: p.name }))
+    return (data.items || []).map((p: any) => ({ id: p.id, name: p.name, framework: p.framework || 'Unknown' }))
   },
   async listProjectTemplates(projectId: string): Promise<ProjectEmailTemplate[]> {
     const list: ApiProjectMeta[] = await api.get(`/projects/${projectId}/email-templates`)
@@ -169,6 +169,11 @@ function dummyFor(name: string): string {
   const base = name.split('.')[0]
   if (DUMMY[base]) return DUMMY[base]
   return 'Sample Value'
+}
+
+/** Email scanning supports Laravel backends only. */
+export function isLaravelProject(framework: string | undefined | null): boolean {
+  return (framework || '').toLowerCase() === 'laravel'
 }
 
 /** Instant client-side general preview — always replaces {var} with dummy data. */

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
-import { extractGeneralVarsClient, extractBladeRawsClient, normalizeBladeRaw, previewBladeClient, previewGeneralClient } from '../api/emailTemplates'
+import { extractGeneralVarsClient, extractBladeRawsClient, normalizeBladeRaw, isLaravelProject, previewBladeClient, previewGeneralClient } from '../api/emailTemplates'
 import { GeneralEmailTemplateBadge, ProjectEmailTemplateBadge } from '../components/email/TemplateBadges'
 import { EmailTemplatePreview } from '../components/email/EmailTemplatePreview'
 
@@ -34,6 +34,17 @@ describe('blade raw extraction (client)', () => {
   })
   it('normalizes whitespace for comparison', () => {
     expect(normalizeBladeRaw('{{    $a   }}')).toBe('{{ $a }}')
+  })
+})
+
+describe('laravel project filter', () => {
+  it('matches Laravel only (case-insensitive)', () => {
+    expect(isLaravelProject('Laravel')).toBe(true)
+    expect(isLaravelProject('laravel')).toBe(true)
+    expect(isLaravelProject('React')).toBe(false)
+    expect(isLaravelProject('Unknown')).toBe(false)
+    expect(isLaravelProject('')).toBe(false)
+    expect(isLaravelProject(undefined)).toBe(false)
   })
 })
 

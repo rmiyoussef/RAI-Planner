@@ -33,6 +33,7 @@ class ProjectResponse(BaseModel):
     task_count: int = 0
     brain_available: bool = False
     brain_message: Optional[str] = None
+    framework: str = "Unknown"
 
 class SystemPromptUpdate(BaseModel):
     system_prompt: str = Field(max_length=20000)

@@ -64,3 +64,4 @@ class EmailPreviewRequest(BaseModel):
 class EmailPreviewResponse(BaseModel):
     html: str
     mock: bool = True
+    unknown_variables: List[EmailTemplateVariable] = Field(default_factory=list)

@@ -167,6 +167,45 @@ async def test_project_list_reports_framework(client):
     assert by_name["PlainApp"]["framework"] not in ("Laravel", "laravel")
 
 
+def test_blade_smart_analysis():
+    from app.services.blade_parser import analyze_blade, extract_defined_variables, render_blade_preview
+    src = open("/tmp/smart.blade").read()
+    assert set(extract_defined_variables(src)) == {
+        "greeting", "it", "employee", "metrics", "type", "subject", "color",
+    }
+    r = analyze_blade(src, known=["company_name"])
+    unknown_names = [u["name"] for u in r["unknown"]]
+    # truly external variables are flagged, with raw expressions preserved
+    assert "ghost" in unknown_names
+    assert "employees" in unknown_names  # iterated collection comes from outside
+    assert "bound" in unknown_names  # :value="$bound" binding comes from outside
+    raws = " ".join(u["raw"] for u in r["unknown"])
+    assert "{{ $ghost }}" in raws
+    # Blade-legit variables are NOT flagged
+    for legit in ["company_name", "loop", "maybe", "message", "attributes", "errors",
+                  "greeting", "employee", "metrics", "type", "subject", "color"]:
+        assert legit not in unknown_names, legit
+    # comments and @verbatim never produce variables
+    assert "in_comment" not in unknown_names and "raw_mustache" not in unknown_names
+    # preview substitution still replaces everything with dummy data
+    assert "Acme Corporation" in render_blade_preview("{{ $company_name }}")
+    # @php logic never leaks into the preview output
+    assert "$ok" not in render_blade_preview("@php $ok = 1; @endphp<p>{{ $ok }}</p>")
+
+
+@pytest.mark.asyncio
+async def test_preview_reports_blade_unknowns(client):
+    data = await signup(client, email="et7@example.com")
+    h = {"Authorization": f"Bearer {data['access_token']}"}
+    r = await client.post("/api/email-templates/preview", json={
+        "content": "@php $ok = 1; @endphp<p>{{ $ok }} {{ $ghost }}</p>", "kind": "blade",
+    }, headers=h)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "Sample Value" in body["html"] or "Acme" in body["html"] or "John" in body["html"]
+    assert [u["name"] for u in body["unknown_variables"]] == ["ghost"]
+
+
 def test_blade_extractor_cases():
     from app.services.blade_parser import BladeEmailVariableExtractor, render_blade_preview
     src = "<h1>{{ $name }}</h1>{!! $html !!}@if($user)<p>{{ $employee->email }}</p>@endif @foreach($employees as $employee) x @endforeach"

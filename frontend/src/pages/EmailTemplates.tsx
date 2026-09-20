@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Mail, Plus, RefreshCw, Loader2, AlertCircle, X, ChevronDown, Package, Folder } from 'lucide-react'
-import { emailApi, type GeneralEmailTemplate, type ProjectEmailTemplate } from '../api/emailTemplates'
+import { emailApi, isLaravelProject, type GeneralEmailTemplate, type ProjectEmailTemplate } from '../api/emailTemplates'
 import { GeneralEmailTemplateBadge, ProjectEmailTemplateBadge } from '../components/email/TemplateBadges'
 import { EmailTemplateEditor } from '../components/email/EmailTemplateEditor'
 
@@ -8,7 +8,7 @@ type TypeFilter = 'all' | 'general' | 'project'
 
 export function EmailTemplates() {
   const [general, setGeneral] = useState<GeneralEmailTemplate[]>([])
-  const [projects, setProjects] = useState<{ id: string; name: string }[]>([])
+  const [projects, setProjects] = useState<{ id: string; name: string; framework: string }[]>([])
   const [projectId, setProjectId] = useState('')
   const [projectTemplates, setProjectTemplates] = useState<ProjectEmailTemplate[]>([])
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
@@ -33,8 +33,12 @@ export function EmailTemplates() {
   async function loadProjects() {
     try {
       const list = await emailApi.listProjects()
-      setProjects(list)
-      if (!projectId && list.length) setProjectId(list[0].id)
+      // Email scanning supports Laravel backends only — filter the dropdown.
+      // Fall back to all projects when none report Laravel (e.g. older backend).
+      const laravel = list.filter((p) => isLaravelProject(p.framework))
+      const visible = laravel.length ? laravel : list
+      setProjects(visible)
+      setProjectId((cur) => (visible.some((p) => p.id === cur) ? cur : visible[0]?.id || ''))
     } catch {}
   }
 
@@ -299,6 +303,9 @@ export function EmailTemplates() {
             <button type="button" onClick={() => loadProjectTemplates(projectId, true)} disabled={scanning} className="btn btn-outline btn-sm cursor-pointer" title="Refresh/Rescan">
               {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} {scanning ? 'Scanning…' : 'Refresh'}
             </button>
+          )}
+          {!loading && !projects.length && (
+            <span className="text-xs font-medium text-muted-foreground">Laravel projects only — none found.</span>
           )}
         </div>
       </div>

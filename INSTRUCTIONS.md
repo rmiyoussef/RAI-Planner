@@ -42,7 +42,7 @@ Shell (view task L973-979, create L648-650):
 ## 4. Email Templates page (`pages/EmailTemplates.tsx`)
 
 - Header: Mail icon box + `Email Templates` + `Manage reusable email templates and templates discovered from backend projects.` + `[+ Add Template]`.
-- Filters card: type tabs All / General Templates / Project Backend Templates (`btn-sm`, active = `btn-primary`) + `Project: [All Projects ▼]` select + Refresh/Rescan button (`scanning` spinner state).
+- Filters card: type tabs All / General Templates / Project Backend Templates (`btn-sm`, active = `btn-primary`) + `Project: [All Projects ▼]` select (**Laravel projects only** — `GET /projects` items carry `framework` from `analyze_project`; dropdown filters via `isLaravelProject`, falls back to all when none report Laravel; hint `Laravel projects only — none found.` when empty) + Refresh/Rescan button (`scanning` spinner state).
 - List is grouped and collapsible (same chevron pattern as `GroupedTable`): `General Templates` group (database-owned) first, then one group per module — `No module` (`resources/views/emails`) first, then `Module: HR` etc. alphabetically. Inside each module, sub-groups by folder from the relative path (`Top level files`, then `Folder: hr/` etc., root first). Group headers show badge/icon + count + project sub (`{project} · resources/views/emails`). No Actions column — clicking a template name opens the editor (preview lives in the editor's Preview tab; rescan via the filter-bar Refresh button).
 - Badges: `GENERAL` = `badge-primary`, `PROJECT` = `badge-warn`. Ownership line in footer: `DATABASE-OWNED vs PROJECT-SOURCE-OWNED`.
 - General row actions: Edit / Preview / Delete. Project row actions: Edit / Preview / Refresh. No project-file delete.

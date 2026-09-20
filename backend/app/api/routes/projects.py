@@ -6,7 +6,7 @@ from app.schemas.project import (
 )
 from app.core.database import get_collection, new_id, utc_now
 from app.api.deps import get_current_owner
-from app.services.filesystem import brain_status, validate_project_path
+from app.services.filesystem import brain_status, validate_project_path, analyze_project
 from app.core.ratelimit import rate_limit
 from app.agents.prompt_manager import DEFAULT_PROJECT_SYSTEM_PROMPT
 import re
@@ -19,6 +19,10 @@ def project_system_prompt(doc) -> str:
 
 def doc_to_resp(doc, task_count=0):
     brain = brain_status(doc["project_path"]) if doc.get("project_path") else {"exists": False}
+    try:
+        framework = analyze_project(doc.get("project_path", "")).get("framework", "Unknown") if doc.get("project_path") else "Unknown"
+    except Exception:
+        framework = "Unknown"
     return ProjectResponse(
         id=doc["_id"],
         owner_id=doc["owner_id"],
@@ -32,7 +36,8 @@ def doc_to_resp(doc, task_count=0):
         updated_at=doc.get("updated_at"),
         task_count=task_count,
         brain_available=brain.get("exists", False),
-        brain_message=brain.get("message") if not brain.get("exists") else None
+        brain_message=brain.get("message") if not brain.get("exists") else None,
+        framework=framework,
     )
 
 @router.get("", response_model=ProjectListResponse)

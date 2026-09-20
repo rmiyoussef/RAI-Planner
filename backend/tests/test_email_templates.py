@@ -151,6 +151,22 @@ async def test_project_read_save_reextract_and_security(client):
     assert r.status_code == 404
 
 
+@pytest.mark.asyncio
+async def test_project_list_reports_framework(client):
+    data = await signup(client, email="et6@example.com")
+    h = {"Authorization": f"Bearer {data['access_token']}"}
+    tmp = tempfile.mkdtemp()
+    make_laravel(tmp)
+    await make_project(client, h, tmp, name="LarApp")
+    tmp2 = tempfile.mkdtemp()
+    await make_project(client, h, tmp2, name="PlainApp")
+    r = await client.get("/api/projects", headers=h)
+    assert r.status_code == 200, r.text
+    by_name = {p["name"]: p for p in r.json()["items"]}
+    assert by_name["LarApp"]["framework"] == "Laravel"
+    assert by_name["PlainApp"]["framework"] not in ("Laravel", "laravel")
+
+
 def test_blade_extractor_cases():
     from app.services.blade_parser import BladeEmailVariableExtractor, render_blade_preview
     src = "<h1>{{ $name }}</h1>{!! $html !!}@if($user)<p>{{ $employee->email }}</p>@endif @foreach($employees as $employee) x @endforeach"
